@@ -30,7 +30,7 @@ export async function fetchNewsHeadlines(query: string): Promise<Article[]> {
   }));
 }
 
-export async function fetchXSentiment(query: string): Promise<SentimentResult> {
+export async function fetchXSentiment(query: string, maxResults: number = 50): Promise<SentimentResult> {
   // Check if X data is enabled via environment variable
   const enableXData = process.env.ENABLE_X_DATA?.toLowerCase() === 'true';
   
@@ -44,10 +44,18 @@ export async function fetchXSentiment(query: string): Promise<SentimentResult> {
 
   const bearer = await getXBearer();
   if (!bearer) return { sentiment: 'NEUTRAL', tweets: [], error: 'Missing X bearer or API credentials' };
+  
   try {
-    const url = `https://api.x.com/2/tweets/search/recent?query=${encodeURIComponent(query)}&tweet.fields=public_metrics,created_at,lang`;
+    // Ensure maxResults is within Twitter API limits (10-100)
+    const clampedMaxResults = Math.min(Math.max(maxResults, 10), 100);
+    const url = `https://api.x.com/2/tweets/search/recent?query=${encodeURIComponent(query)}&tweet.fields=public_metrics,created_at,lang&max_results=${clampedMaxResults}`;
+    
+    console.log(`🐦 Fetching up to ${clampedMaxResults} X posts for query: ${query}`);
     const resp = await axios.get(url, { headers: { Authorization: `Bearer ${bearer}` } });
     const tweets = resp.data?.data || [];
+    
+    console.log(`🐦 Successfully fetched ${tweets.length} X posts`);
+    
     let score = 0;
     for (const t of tweets) {
       const text = (t.text || '').toLowerCase();
@@ -57,6 +65,7 @@ export async function fetchXSentiment(query: string): Promise<SentimentResult> {
     const sentiment: SentimentResult['sentiment'] = score > 1 ? 'POSITIVE' : score < -1 ? 'NEGATIVE' : 'NEUTRAL';
     return { sentiment, tweets };
   } catch (e: any) {
+    console.log(`🐦 Error fetching X posts: ${e?.message || String(e)}`);
     return { sentiment: 'NEUTRAL', tweets: [], error: e?.message || String(e) };
   }
 }

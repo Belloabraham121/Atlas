@@ -183,9 +183,10 @@ export class ScannerAgent {
       const newsHeadlines = await fetchNewsHeadlines(token);
       console.log(`📰 Fetched ${newsHeadlines.length} news headlines`);
       
-      // Fetch X sentiment (respects ENABLE_X_DATA internally)
-      const xSentiment = await fetchXSentiment(token);
-      console.log(`🐦 X sentiment: ${xSentiment.sentiment}${xSentiment.error ? ` (${xSentiment.error})` : ''}`);
+      // Fetch X sentiment with configurable post count (respects ENABLE_X_DATA internally)
+      const xPostsCount = parseInt(process.env.X_POSTS_COUNT || '50', 10);
+      const xSentiment = await fetchXSentiment(token, xPostsCount);
+      console.log(`🐦 X sentiment: ${xSentiment.sentiment}, Posts fetched: ${xSentiment.tweets.length}${xSentiment.error ? ` (${xSentiment.error})` : ''}`);
       
       // Determine overall sentiment (prioritize X if available, fallback to neutral)
       let overallSentiment = 'neutral';
@@ -198,13 +199,15 @@ export class ScannerAgent {
         trends: newsHeadlines,
         xSentiment: xSentiment.sentiment,
         xError: xSentiment.error,
-        xTweets: xSentiment.tweets.slice(0, 3) // Top 3 tweets
+        xTweets: xSentiment.tweets.slice(0, 3), // Top 3 tweets for display
+        xPostsAnalyzed: xSentiment.tweets.length // Total posts analyzed
       };
       
       console.log(`📈 Processed market data:`, {
         sentiment: marketData.sentiment,
         newsCount: newsHeadlines.length,
         xSentiment: marketData.xSentiment,
+        xPostsAnalyzed: marketData.xPostsAnalyzed,
         xEnabled: !xSentiment.error?.includes('disabled')
       });
       

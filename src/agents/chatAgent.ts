@@ -41,7 +41,7 @@ export class ChatAgent {
         const response = llmResponse.payload.response;
         
         // Parse if LLM suggests specific actions
-        const intent = this.parseUserIntent(message);
+        const intent = this.parseUserIntent(message, userId);
         
         if (intent.type === 'scan_user') {
           // Execute scan and combine with LLM insights
@@ -68,7 +68,7 @@ export class ChatAgent {
         }
       } else {
         // Fallback to original parsing if LLM fails
-        const intent = this.parseUserIntent(message);
+        const intent = this.parseUserIntent(message, userId);
         
         if (intent.type === 'scan_user') {
           return await this.handleScanUser(intent.userId || userId, intent.token || 'all', startTime);
@@ -85,7 +85,7 @@ export class ChatAgent {
       console.error('Error processing user command:', error);
       
       // Fallback to original parsing if LLM fails
-      const intent = this.parseUserIntent(message);
+      const intent = this.parseUserIntent(message, userId);
       
       if (intent.type === 'scan_user') {
         return await this.handleScanUser(intent.userId || userId, intent.token || 'all', startTime);
@@ -100,30 +100,65 @@ export class ChatAgent {
     }
   }
 
-  private parseUserIntent(message: string): {
+  private parseUserIntent(message: string, contextUserId: string): {
     type: 'scan_user' | 'generate_graph' | 'unknown';
     userId?: string;
     token?: string;
+    isSelfScan?: boolean;
   } {
     const lowerMessage = message.toLowerCase();
     
-    // Extract user ID from message (supports both userXXX and Hedera account IDs like 0.0.2)
-    const userMatch = lowerMessage.match(/user(\w+)/);
+    // Extract explicit addresses from message (Hedera account IDs like 0.0.2)
     const hederaAccountMatch = lowerMessage.match(/(\d+\.\d+\.\d+)/);
-    const userId = userMatch ? `user${userMatch[1]}` : (hederaAccountMatch ? hederaAccountMatch[1] : undefined);
+    const userMatch = lowerMessage.match(/user(\w+)/);
+    
+    // Check for self-referential patterns
+    const selfPatterns = [
+      'my wallet', 'my portfolio', 'my account', 'my address',
+      'scan me', 'analyze me', 'check me', 'my holdings',
+      'my tokens', 'my balance', 'my assets'
+    ];
+    const isSelfReference = selfPatterns.some(pattern => lowerMessage.includes(pattern));
+    
+    // Determine target address with context-aware routing
+    let targetUserId: string | undefined;
+    let isSelfScan = false;
+    
+    if (hederaAccountMatch) {
+      // Explicit address provided - scan that specific address
+      targetUserId = hederaAccountMatch[1];
+      isSelfScan = false;
+    } else if (userMatch) {
+      // Legacy user format
+      targetUserId = `user${userMatch[1]}`;
+      isSelfScan = false;
+    } else if (isSelfReference) {
+      // Self-referential language - use context userId
+      targetUserId = contextUserId;
+      isSelfScan = true;
+    } else if (
+      lowerMessage.includes('scan') || 
+      lowerMessage.includes('analyze') ||
+      lowerMessage.includes('check')
+    ) {
+      // Generic scan without specific target - default to self
+      targetUserId = contextUserId;
+      isSelfScan = true;
+    }
 
     // Check for graph generation requests
     if ((lowerMessage.includes('check') || lowerMessage.includes('generate')) && lowerMessage.includes('graph')) {
-      return { type: 'generate_graph', userId };
+      return { type: 'generate_graph', userId: targetUserId, isSelfScan };
     } 
     // Check for scan/analysis requests
     else if (
       lowerMessage.includes('scan') || 
       lowerMessage.includes('analyze') ||
       lowerMessage.includes('check') && (lowerMessage.includes('thing') || lowerMessage.includes('portfolio')) ||
-      hederaAccountMatch // If we found a Hedera account ID, assume it's a scan request
+      hederaAccountMatch || // If we found a Hedera account ID, assume it's a scan request
+      isSelfReference // If self-referential language detected
     ) {
-      return { type: 'scan_user', userId, token: 'all' };
+      return { type: 'scan_user', userId: targetUserId, token: 'all', isSelfScan };
     }
 
     return { type: 'unknown' };
@@ -294,16 +329,23 @@ export class ChatAgent {
       timestamp: new Date().toISOString() 
     });
 
-    const intent = this.parseUserIntent(message);
+    const intent = this.parseUserIntent(message, userId);
     
     if (intent.type === 'scan_user') {
       const targetUserId = intent.userId || userId;
       const token = intent.token || 'HBAR';
+      const isSelfScan = intent.isSelfScan || (targetUserId === userId);
       
-      // Step 1: Scanner Agent
+      // Step 1: Scanner Agent with context-aware messaging
+      const scanMessage = isSelfScan 
+        ? `🔍 Scanning your portfolio (${targetUserId})...`
+        : `🔍 Scanning ${targetUserId}'s portfolio...`;
+      
       sendStep('scanner_start', { 
-        message: `🔍 Scanning ${targetUserId}'s portfolio...`,
-        agent: 'scanner@portfolio.guard'
+        message: scanMessage,
+        agent: 'scanner@portfolio.guard',
+        isSelfScan,
+        targetAddress: targetUserId
       });
 
       try {
