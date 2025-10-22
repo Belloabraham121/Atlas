@@ -31,6 +31,17 @@ export async function fetchNewsHeadlines(query: string): Promise<Article[]> {
 }
 
 export async function fetchXSentiment(query: string): Promise<SentimentResult> {
+  // Check if X data is enabled via environment variable
+  const enableXData = process.env.ENABLE_X_DATA?.toLowerCase() === 'true';
+  
+  if (!enableXData) {
+    return { 
+      sentiment: 'NEUTRAL', 
+      tweets: [], 
+      error: 'X data integration is disabled (ENABLE_X_DATA=false)' 
+    };
+  }
+
   const bearer = await getXBearer();
   if (!bearer) return { sentiment: 'NEUTRAL', tweets: [], error: 'Missing X bearer or API credentials' };
   try {

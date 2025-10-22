@@ -107,13 +107,22 @@ export class ChatAgent {
   } {
     const lowerMessage = message.toLowerCase();
     
-    // Extract user ID from message
+    // Extract user ID from message (supports both userXXX and Hedera account IDs like 0.0.2)
     const userMatch = lowerMessage.match(/user(\w+)/);
-    const userId = userMatch ? `user${userMatch[1]}` : undefined;
+    const hederaAccountMatch = lowerMessage.match(/(\d+\.\d+\.\d+)/);
+    const userId = userMatch ? `user${userMatch[1]}` : (hederaAccountMatch ? hederaAccountMatch[1] : undefined);
 
-    if (lowerMessage.includes('check') && lowerMessage.includes('graph')) {
+    // Check for graph generation requests
+    if ((lowerMessage.includes('check') || lowerMessage.includes('generate')) && lowerMessage.includes('graph')) {
       return { type: 'generate_graph', userId };
-    } else if (lowerMessage.includes('check') && (lowerMessage.includes('thing') || lowerMessage.includes('portfolio'))) {
+    } 
+    // Check for scan/analysis requests
+    else if (
+      lowerMessage.includes('scan') || 
+      lowerMessage.includes('analyze') ||
+      lowerMessage.includes('check') && (lowerMessage.includes('thing') || lowerMessage.includes('portfolio')) ||
+      hederaAccountMatch // If we found a Hedera account ID, assume it's a scan request
+    ) {
       return { type: 'scan_user', userId, token: 'all' };
     }
 
@@ -269,6 +278,194 @@ export class ChatAgent {
       case 'LOW': return '2.5';
       case 'SAFE': return '1.4';
       default: return '5.0';
+    }
+  }
+
+  async processUserCommandStreaming(
+    message: string, 
+    userId: string, 
+    sendStep: (step: string, data: any) => void
+  ): Promise<void> {
+    const startTime = Date.now();
+    
+    // Send initial step
+    sendStep('start', { 
+      message: 'Starting analysis...', 
+      timestamp: new Date().toISOString() 
+    });
+
+    const intent = this.parseUserIntent(message);
+    
+    if (intent.type === 'scan_user') {
+      const targetUserId = intent.userId || userId;
+      const token = intent.token || 'HBAR';
+      
+      // Step 1: Scanner Agent
+      sendStep('scanner_start', { 
+        message: `🔍 Scanning ${targetUserId}'s portfolio...`,
+        agent: 'scanner@portfolio.guard'
+      });
+
+      try {
+         // Send analyze address request to scanner
+         bus.sendMessage({
+           from: this.agentName,
+           to: 'scanner@portfolio.guard',
+           type: 'analyze_address',
+           payload: { address: targetUserId, userId: targetUserId }
+         });
+
+         // Wait for scanner response
+          const responses = await bus.waitForResponses(this.agentName, ['analysis_response'], 30000);
+          const scannerResponse = responses.find(r => r.type === 'analysis_response');
+         
+         if (!scannerResponse) {
+           throw new Error('No scanner response received');
+         }
+         
+         const analysisPayload = scannerResponse.payload;
+         if (!analysisPayload.success) {
+           throw new Error(`Scanner analysis failed: ${analysisPayload.error}`);
+         }
+
+         sendStep('scanner_complete', {
+           message: '✅ Portfolio scan complete',
+           data: analysisPayload.analysis,
+           agent: 'scanner@portfolio.guard'
+         });
+
+         // Step 2: News/Market Data
+         sendStep('news_start', {
+           message: '📰 Fetching market trends and news...',
+           agent: 'news@portfolio.guard'
+         });
+
+         // The scanner already fetched market data, extract it
+         const marketData = scannerResponse.payload.marketData;
+         
+         sendStep('news_complete', {
+           message: '✅ Market analysis complete',
+           data: marketData,
+           agent: 'news@portfolio.guard'
+         });
+
+         // Step 3: LLM Analysis
+         sendStep('llm_start', {
+           message: '🤖 Generating AI analysis...',
+           agent: 'llm@portfolio.guard'
+         });
+
+         // Send to LLM for final analysis
+         bus.sendMessage({
+           from: this.agentName,
+           to: 'llm@portfolio.guard',
+           type: 'llm_query',
+           payload: {
+             query: `Analyze this portfolio data: ${JSON.stringify(scannerResponse.payload)}`,
+             userId: targetUserId
+           }
+         });
+
+         const llmResponses = await bus.waitForResponses(this.agentName, ['llm_response'], 30000);
+         const llmResponse = llmResponses.find(r => r.type === 'llm_response');
+         
+         if (llmResponse) {
+           sendStep('llm_complete', {
+             message: '✅ AI analysis complete',
+             data: llmResponse.payload,
+             agent: 'llm@portfolio.guard'
+           });
+         }
+
+         // Final Summary
+         const latency = Date.now() - startTime;
+         const analysis = analysisPayload.analysis;
+         
+         let summaryResponse = `🤖 🔍 PORTFOLIO ANALYSIS: ${targetUserId}\n\n`;
+         
+         if (analysis.balance) {
+           summaryResponse += `💰 Balance: ${analysis.balance.hbars}\n`;
+           if (analysis.balance.tokens && analysis.balance.tokens.length > 0) {
+             summaryResponse += `🪙 Tokens: ${analysis.balance.tokens.length} different tokens\n`;
+           }
+         }
+         
+         if (analysis.riskScore !== undefined) {
+           summaryResponse += `⚠️ Risk Score: ${analysis.riskScore}/10\n`;
+         }
+         
+         if (analysis.marketData) {
+           summaryResponse += `📈 Market Sentiment: ${analysis.marketData.sentiment}\n`;
+         }
+         
+         summaryResponse += `\n⏱️ Analysis completed in ${latency}ms`;
+
+         sendStep('summary', {
+           message: 'Analysis Complete',
+           response: summaryResponse,
+           latency: latency,
+           timestamp: new Date().toISOString()
+         });
+
+      } catch (error: any) {
+        sendStep('error', {
+          message: 'Analysis failed',
+          error: error.message || String(error),
+          agent: 'system'
+        });
+      }
+
+    } else if (intent.type === 'generate_graph') {
+      // Step 1: Graph Generation
+      sendStep('graph_start', {
+        message: '📊 Generating portfolio graphs...',
+        agent: 'graph@portfolio.guard'
+      });
+
+      try {
+        bus.sendMessage({
+          from: this.agentName,
+          to: 'graph@portfolio.guard',
+          type: 'generate_graph',
+          payload: { userId }
+        });
+
+        const graphResponses = await bus.waitForResponses(this.agentName, ['graph_ready'], 30000);
+         const graphResponse = graphResponses.find(r => r.type === 'graph_ready');
+         
+         if (!graphResponse) {
+           throw new Error('No graph response received');
+         }
+         
+         sendStep('graph_complete', {
+           message: '✅ Graphs generated successfully',
+           data: graphResponse.payload,
+           agent: 'graph@portfolio.guard'
+         });
+
+         const latency = Date.now() - startTime;
+         sendStep('summary', {
+           message: 'Graph Generation Complete',
+           response: `📊 Generated ${graphResponse.payload.graphs?.length || 0} portfolio graphs for ${userId}`,
+           graphs: graphResponse.payload.graphs,
+           latency: latency,
+           timestamp: new Date().toISOString()
+         });
+
+      } catch (error: any) {
+        sendStep('error', {
+          message: 'Graph generation failed',
+          error: error.message || String(error),
+          agent: 'system'
+        });
+      }
+
+    } else {
+      sendStep('error', {
+        message: 'Unknown command',
+        error: 'I can help you scan portfolios or generate graphs. Try "scan user.hbar" or "generate graph"',
+        agent: 'system'
+      });
     }
   }
 

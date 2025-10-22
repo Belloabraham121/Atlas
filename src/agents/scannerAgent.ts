@@ -1,5 +1,6 @@
 import { A2AMessage, bus } from '../utils/bus.js';
 import axios from 'axios';
+import { fetchNewsHeadlines, fetchXSentiment } from '../services/news.js';
 
 interface AnalysisResult {
   address: string;
@@ -175,32 +176,47 @@ export class ScannerAgent {
 
   private async getMarketTrends(userId: string): Promise<any> {
     try {
-      // Use the existing X-trend endpoint with HBAR as default
-      const trendsUrl = `${this.baseUrl}/api/${userId}/x-test`;
-      console.log(`📈 Market trends URL: ${trendsUrl}`);
+      const token = 'HBAR';
+      console.log(`📈 Fetching market trends for ${token}...`);
       
-      const response = await axios.post(trendsUrl, {
-        token: 'HBAR'
-      });
+      // Always fetch NewsAPI headlines
+      const newsHeadlines = await fetchNewsHeadlines(token);
+      console.log(`📰 Fetched ${newsHeadlines.length} news headlines`);
       
-      console.log(`📈 Market trends response status: ${response.status}`);
-      console.log(`📈 Market trends response data:`, response.data);
+      // Fetch X sentiment (respects ENABLE_X_DATA internally)
+      const xSentiment = await fetchXSentiment(token);
+      console.log(`🐦 X sentiment: ${xSentiment.sentiment}${xSentiment.error ? ` (${xSentiment.error})` : ''}`);
       
-      // Check if we have data even if success flag is false (e.g., rate limit but cached data available)
-      if (response.data && (response.data.success || response.data.headlines)) {
-        const marketData = {
-          sentiment: response.data.sentiment || 'neutral',
-          trends: response.data.headlines || []
-        };
-        console.log(`📈 Processed market data:`, marketData);
-        return marketData;
+      // Determine overall sentiment (prioritize X if available, fallback to neutral)
+      let overallSentiment = 'neutral';
+      if (!xSentiment.error && xSentiment.sentiment !== 'NEUTRAL') {
+        overallSentiment = xSentiment.sentiment.toLowerCase();
       }
       
-      console.log(`📈 Market trends response not successful and no data available`);
-      return null;
+      const marketData = {
+        sentiment: overallSentiment,
+        trends: newsHeadlines,
+        xSentiment: xSentiment.sentiment,
+        xError: xSentiment.error,
+        xTweets: xSentiment.tweets.slice(0, 3) // Top 3 tweets
+      };
+      
+      console.log(`📈 Processed market data:`, {
+        sentiment: marketData.sentiment,
+        newsCount: newsHeadlines.length,
+        xSentiment: marketData.xSentiment,
+        xEnabled: !xSentiment.error?.includes('disabled')
+      });
+      
+      return marketData;
     } catch (error: any) {
       console.warn(`📈 Failed to fetch market trends:`, error.message);
-      return null;
+      return {
+        sentiment: 'neutral',
+        trends: [],
+        xSentiment: 'NEUTRAL',
+        xError: error.message
+      };
     }
   }
 

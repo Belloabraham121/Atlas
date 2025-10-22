@@ -80,6 +80,56 @@ router.post('/:userId/chat', async (req: Request<{ userId: string }, any, { mess
   }
 });
 
+// New streaming chat endpoint
+router.post('/:userId/chat-stream', async (req: Request<{ userId: string }, any, { message?: string }>, res: Response) => {
+  try {
+    const { message } = req.body || {};
+    const { userId } = req.params;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Missing message' });
+    }
+
+    console.log(`💬 Streaming chat request from ${userId}: ${message}`);
+
+    // Set up Server-Sent Events
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+
+    // Helper function to send SSE data
+    const sendStep = (step: string, data: any) => {
+      res.write(`event: ${step}\n`);
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      // Process the message through the streaming Chat Agent
+      await chatAgent.processUserCommandStreaming(message.trim(), userId, sendStep);
+      
+      // Send completion event
+      sendStep('complete', { message: 'Analysis complete' });
+      
+    } catch (error: any) {
+      console.error('Streaming chat error:', error);
+      sendStep('error', { error: error.message || String(error) });
+    }
+
+    res.end();
+
+  } catch (e: any) {
+    console.error('Chat streaming endpoint error:', e);
+    res.status(500).json({ 
+      ok: false, 
+      error: e?.message || String(e) 
+    });
+  }
+});
+
 router.post('/:userId/start', async (_req: Request, res: Response) => {
   res.json({ ok: true, message: 'Monitoring started' });
 });
