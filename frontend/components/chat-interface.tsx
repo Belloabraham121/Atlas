@@ -9,18 +9,21 @@ import { useAccount, useDisconnect } from "wagmi"
 import { useConnectModal } from "@rainbow-me/rainbowkit"
 import WalletConnection from "@/components/WalletConnection"
 import Link from "next/link"
+import { useChatStream } from "@/hooks/use-chat-stream"
 
 interface Message {
   id: string
   role: "user" | "assistant"
   content: string
   timestamp: Date
+  isStreaming?: boolean
+  graphs?: any[]
 }
 
 interface ChatSession {
   id: string
   title: string
-  createdAt: Date
+  timestamp: Date
   messageCount: number
 }
 
@@ -28,27 +31,51 @@ export function ChatInterface() {
   const { isConnected, address } = useAccount()
   const { disconnect } = useDisconnect()
   const { openConnectModal } = useConnectModal()
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      role: "assistant",
-      content: address
-        ? `Hello! I'm ATLAS, your AI-powered Hedera portfolio intelligence assistant. I can see you're connected with account ${address}. How can I help you today? You can ask me about portfolio analysis, risk assessment, market trends, or any questions about your Hedera investments.`
-        : "Hello! I'm ATLAS, your AI-powered Hedera portfolio intelligence assistant. How can I help you today? You can ask me about portfolio analysis, risk assessment, market trends, or any questions about your Hedera investments.",
-      timestamp: new Date(),
-    },
-  ])
+  
+  // Use the streaming chat hook
+  const { 
+    messages: streamMessages, 
+    isStreaming, 
+    error: streamError, 
+    sendMessage, 
+    clearMessages,
+    isConnected: isStreamConnected,
+    hederaAccountId 
+  } = useChatStream()
+  
   const [input, setInput] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([
-    { id: "1", title: "Portfolio Analysis", createdAt: new Date(Date.now() - 86400000), messageCount: 12 },
-    { id: "2", title: "Risk Assessment", createdAt: new Date(Date.now() - 172800000), messageCount: 8 },
-    { id: "3", title: "Market Trends", createdAt: new Date(Date.now() - 259200000), messageCount: 15 },
+    { id: "1", title: "Portfolio Analysis", timestamp: new Date(Date.now() - 86400000), messageCount: 12 },
+    { id: "2", title: "Risk Assessment", timestamp: new Date(Date.now() - 172800000), messageCount: 8 },
+    { id: "3", title: "Market Trends", timestamp: new Date(Date.now() - 259200000), messageCount: 15 },
   ])
   const [activeChatId, setActiveChatId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  // Initialize with welcome message when connected
+  const [hasInitialized, setHasInitialized] = useState(false)
+  
+  useEffect(() => {
+    if (isConnected && hederaAccountId && !hasInitialized) {
+      // Clear any existing messages and show welcome message
+      clearMessages()
+      setHasInitialized(true)
+    } else if (!isConnected) {
+      setHasInitialized(false)
+    }
+  }, [isConnected, hederaAccountId, hasInitialized, clearMessages])
+
+  // Use streaming messages, but add welcome message if empty
+  const messages = streamMessages.length === 0 && isConnected ? [
+    {
+      id: "welcome",
+      role: "assistant" as const,
+      content: `Hello! I'm ATLAS, your AI-powered Hedera portfolio intelligence assistant. I can see you're connected with wallet ${hederaAccountId}. How can I help you today? You can ask me about portfolio analysis, risk assessment, market trends, or any questions about your Hedera investments.`,
+      timestamp: new Date(),
+    }
+  ] : streamMessages
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -60,51 +87,11 @@ export function ChatInterface() {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.trim() || isLoading) return
+    if (!input.trim() || isStreaming) return
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content: input,
-      timestamp: new Date(),
-    }
-
-    setMessages((prev) => [...prev, userMessage])
+    // Use the streaming hook to send the message
+    await sendMessage(input)
     setInput("")
-    setIsLoading(true)
-
-    setTimeout(() => {
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: generateMockResponse(input),
-        timestamp: new Date(),
-      }
-      setMessages((prev) => [...prev, assistantMessage])
-      setIsLoading(false)
-    }, 1000)
-  }
-
-  const generateMockResponse = (userInput: string): string => {
-    const responses: { [key: string]: string } = {
-      portfolio:
-        "Your portfolio shows a balanced distribution across HBAR and HTS tokens. Current total value: $12,450. Risk score: 4.2/10 (Low Risk). Recent performance: +12.3% over the last 30 days.",
-      risk: "Your portfolio risk assessment indicates low volatility. The largest risk factor is concentration in HBAR (65% of portfolio). I recommend diversifying into more HTS tokens to reduce risk.",
-      market:
-        "Current Hedera market sentiment is bullish. Network activity has increased 23% this month. Transaction volume is at an all-time high. Major institutional interest detected.",
-      balance:
-        "Your current HBAR balance: 5,000 HBAR ($0.08 each = $400). HTS token holdings: 10,000 USDC, 5,000 USDT. Total portfolio value: $12,450.",
-      default:
-        "That's an interesting question about your Hedera portfolio. Based on current market data and your holdings, I can provide detailed analysis. Could you be more specific about what aspect you'd like to explore?",
-    }
-
-    const lowerInput = userInput.toLowerCase()
-    for (const [key, response] of Object.entries(responses)) {
-      if (lowerInput.includes(key)) {
-        return response
-      }
-    }
-    return responses.default
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -125,32 +112,18 @@ export function ChatInterface() {
     const newChat: ChatSession = {
       id: Date.now().toString(),
       title: "New Chat",
-      createdAt: new Date(),
+      timestamp: new Date(),
       messageCount: 0,
     }
     setChatSessions((prev) => [newChat, ...prev])
     setActiveChatId(newChat.id)
-    setMessages([
-      {
-        id: "1",
-        role: "assistant",
-        content: "Hello! I'm ATLAS, your AI-powered Hedera portfolio intelligence assistant. How can I help you today?",
-        timestamp: new Date(),
-      },
-    ])
+    clearMessages()
   }
 
   const handleSelectChat = (chatId: string) => {
     setActiveChatId(chatId)
     // In a real app, this would load the chat history from storage
-    setMessages([
-      {
-        id: "1",
-        role: "assistant",
-        content: "Chat history loaded. How can I assist you?",
-        timestamp: new Date(),
-      },
-    ])
+    clearMessages()
   }
 
   // Show wallet connection screen if not connected
@@ -360,7 +333,7 @@ export function ChatInterface() {
                   </div>
                 </div>
               ))}
-              {isLoading && (
+              {isStreaming && (
                 <div className="flex gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                   <div className="w-8 h-8 rounded-full bg-white flex-shrink-0 flex items-center justify-center">
                     <span className="text-black font-bold text-sm">A</span>
@@ -404,7 +377,7 @@ export function ChatInterface() {
                 />
                 <Button
                   type="submit"
-                  disabled={!input.trim() || isLoading}
+                  disabled={!input.trim() || isStreaming}
                   className="bg-white text-black hover:bg-gray-200 rounded px-6 py-3 font-semibold flex-shrink-0 h-auto"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
