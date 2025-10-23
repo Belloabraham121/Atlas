@@ -67,6 +67,75 @@ router.post(
 );
 
 router.post(
+  "/:userId/test-graph",
+  async (
+    req: Request<
+      { userId: string },
+      any,
+      { token?: string; timeframe?: string; chartType?: string }
+    >,
+    res: Response
+  ) => {
+    try {
+      const { token = "HBAR", timeframe = "7d", chartType = "price" } = req.body || {};
+      const userId = req.params.userId;
+
+      console.log(`📊 Graph test request from ${userId}: ${token} (${timeframe}, ${chartType})`);
+
+      // Import MarketDataService to test graph generation directly
+      const { MarketDataService } = await import("../services/marketData.js");
+      const marketDataService = new MarketDataService();
+
+      const startTime = Date.now();
+
+      // Test token chart generation
+      const chartData = await marketDataService.getTokenChartData(
+        token,
+        timeframe as '1h' | '24h' | '7d' | '30d',
+        chartType as 'line' | 'candlestick' | 'volume' | 'correlation'
+      );
+
+      const latency = Date.now() - startTime;
+
+      if (chartData) {
+        res.json({
+          ok: true,
+          chartData,
+          latency,
+          timestamp: new Date().toISOString(),
+          test_info: {
+            token,
+            timeframe,
+            chartType,
+            data_points: chartData.data.length,
+            confidence: chartData.metadata.confidence
+          }
+        });
+      } else {
+        res.json({
+          ok: false,
+          error: `Failed to generate chart data for ${token}`,
+          latency,
+          timestamp: new Date().toISOString(),
+          test_info: {
+            token,
+            timeframe,
+            chartType
+          }
+        });
+      }
+    } catch (e: any) {
+      console.error("Graph test endpoint error:", e);
+      res.status(500).json({
+        ok: false,
+        error: e?.message || String(e),
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+);
+
+router.post(
   "/:userId/chat",
   async (
     req: Request<

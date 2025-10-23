@@ -73,6 +73,20 @@ export class ChatAgent {
             graphs: graphResult.graphs,
             latency: Date.now() - startTime,
           };
+        } else if (intent.type === "generate_token_chart") {
+          // Execute token chart generation and combine with LLM insights
+          const tokenChartResult = await this.handleGenerateTokenChart(
+            intent.token || "HBAR",
+            intent.timeframe || "24h",
+            intent.chartType || "price",
+            intent.userId || userId,
+            startTime
+          );
+          return {
+            response: `${response}\n\n${tokenChartResult.response}`,
+            graphs: tokenChartResult.graphs,
+            latency: Date.now() - startTime,
+          };
         } else {
           // Return LLM response for general queries
           return {
@@ -95,10 +109,18 @@ export class ChatAgent {
             intent.userId || userId,
             startTime
           );
+        } else if (intent.type === "generate_token_chart") {
+          return await this.handleGenerateTokenChart(
+            intent.token || "HBAR",
+            intent.timeframe || "24h",
+            intent.chartType || "price",
+            intent.userId || userId,
+            startTime
+          );
         } else {
           return {
             response:
-              "🤖 I can help you scan user portfolios or generate graphs. Try:\n• 'check user1's thing'\n• 'check user1 graph'",
+              "🤖 I can help you scan user portfolios, generate graphs, or create token charts. Try:\n• 'check user1's thing'\n• 'generate graph'\n• 'show me HBAR price history'\n• 'chart for token 0.0.123456'",
             latency: Date.now() - startTime,
           };
         }
@@ -120,10 +142,18 @@ export class ChatAgent {
           intent.userId || userId,
           startTime
         );
+      } else if (intent.type === "generate_token_chart") {
+        return await this.handleGenerateTokenChart(
+          intent.token || "HBAR",
+          intent.timeframe || "24h",
+          intent.chartType || "price",
+          intent.userId || userId,
+          startTime
+        );
       } else {
         return {
           response:
-            "🤖 I can help you scan user portfolios or generate graphs. Try:\n• 'check user1's thing'\n• 'check user1 graph'",
+            "🤖 I can help you scan user portfolios, generate graphs, or create token charts. Try:\n• 'check user1's thing'\n• 'generate graph'\n• 'show me HBAR price history'\n• 'chart for token 0.0.123456'",
           latency: Date.now() - startTime,
         };
       }
@@ -134,9 +164,11 @@ export class ChatAgent {
     message: string,
     contextUserId: string
   ): {
-    type: "scan_user" | "generate_graph" | "unknown";
+    type: "scan_user" | "generate_graph" | "generate_token_chart" | "unknown";
     userId?: string;
     token?: string;
+    chartType?: string;
+    timeframe?: string;
     isSelfScan?: boolean;
   } {
     const lowerMessage = message.toLowerCase();
@@ -144,6 +176,17 @@ export class ChatAgent {
     // Extract explicit addresses from message (Hedera account IDs like 0.0.2)
     const hederaAccountMatch = lowerMessage.match(/(\d+\.\d+\.\d+)/);
     const userMatch = lowerMessage.match(/user(\w+)/);
+
+    // Extract token symbols and token IDs
+    const tokenSymbolMatch = lowerMessage.match(/\b(hbar|usdc|usdt|btc|eth|matic|ada|dot|link|uni|aave|comp|mkr|snx|yfi|1inch|crv|bal|sushi|alpha|cream|badger|rook|farm|pickle|cover|armor|bond|digg|bnt|knc|lrc|zrx|ren|storj|grt|uma|band|ocean|fet|agi|nmr|rlc|ant|mana|enj|sand|axs|slp|chr|alice|tlm|audio|rari|tribe|fei|rai|lusd|frax|ohm|klima|time|memo|spell|ice|mim|cvx|fxs|alcx)\b/);
+    const tokenIdMatch = lowerMessage.match(/token\s+(\d+\.\d+\.\d+)/);
+    
+    // Extract timeframe
+    const timeframeMatch = lowerMessage.match(/\b(1h|4h|24h|7d|30d|1y|all)\b/) || 
+                          lowerMessage.match(/\b(hour|day|week|month|year)\b/);
+    
+    // Extract chart type
+    const chartTypeMatch = lowerMessage.match(/\b(price|volume|market cap|correlation|performance|history)\b/);
 
     // Check for self-referential patterns
     const selfPatterns = [
@@ -189,7 +232,61 @@ export class ChatAgent {
       isSelfScan = true;
     }
 
-    // Check for graph generation requests
+    // Determine token for analysis
+    let token = "HBAR"; // Default token
+    if (tokenSymbolMatch) {
+      token = tokenSymbolMatch[1].toUpperCase();
+    } else if (tokenIdMatch) {
+      token = tokenIdMatch[1];
+    }
+
+    // Determine timeframe
+    let timeframe = "24h"; // Default timeframe
+    if (timeframeMatch) {
+      const tf = timeframeMatch[1];
+      if (tf === "hour") timeframe = "1h";
+      else if (tf === "day") timeframe = "24h";
+      else if (tf === "week") timeframe = "7d";
+      else if (tf === "month") timeframe = "30d";
+      else if (tf === "year") timeframe = "1y";
+      else timeframe = tf;
+    }
+
+    // Determine chart type
+    let chartType = "price"; // Default chart type
+    if (chartTypeMatch) {
+      chartType = chartTypeMatch[1];
+    }
+
+    // Check for token-specific graph generation requests
+    const tokenGraphPatterns = [
+      "price history",
+      "price chart",
+      "token chart",
+      "show me",
+      "chart for",
+      "graph for",
+      "price of",
+      "history of",
+      "performance of"
+    ];
+    
+    const isTokenGraphRequest = tokenGraphPatterns.some((pattern) =>
+      lowerMessage.includes(pattern)
+    ) && (tokenSymbolMatch || tokenIdMatch || lowerMessage.includes("token"));
+
+    if (isTokenGraphRequest) {
+      return {
+        type: "generate_token_chart" as const,
+        userId: targetUserId,
+        token,
+        chartType,
+        timeframe,
+        isSelfScan,
+      };
+    }
+
+    // Check for general graph generation requests
     if (
       (lowerMessage.includes("check") || lowerMessage.includes("generate")) &&
       lowerMessage.includes("graph")
@@ -310,7 +407,7 @@ export class ChatAgent {
         const payload = graphResponse.payload as GraphReadyPayload;
 
         return {
-          response: `📈 Graph generated for ${userId}`,
+          response: `📊 Generated portfolio graph for ${userId}`,
           graphs: [payload.config],
           latency: Date.now() - startTime,
         };
@@ -324,6 +421,65 @@ export class ChatAgent {
       console.error("Error in handleGenerateGraph:", error);
       return {
         response: `🤖 ❌ Error generating graph for ${userId}: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+        latency: Date.now() - startTime,
+      };
+    }
+  }
+
+  private async handleGenerateTokenChart(
+    token: string,
+    timeframe: string,
+    chartType: string,
+    userId: string,
+    startTime: number
+  ): Promise<{
+    response: string;
+    graphs?: any[];
+    latency: number;
+  }> {
+    try {
+      // Request token chart generation
+      bus.sendMessage({
+        type: "generate_token_chart",
+        from: this.agentName,
+        to: "graph@portfolio.guard",
+        payload: { 
+          token,
+          timeframe,
+          chartType: chartType === "history" ? "price" : chartType,
+          userId 
+        },
+      });
+
+      // Wait for token chart response
+      const graphResponses = await bus.waitForResponses(
+        this.agentName,
+        ["token_chart_ready"],
+        30000
+      );
+      const graphResponse = graphResponses.find(
+        (r) => r.type === "token_chart_ready"
+      );
+
+      if (graphResponse) {
+         const payload = graphResponse.payload as GraphReadyPayload;
+         return {
+           response: `📈 Generated ${chartType} chart for ${token} over ${timeframe} timeframe`,
+           graphs: [payload.config],
+           latency: Date.now() - startTime,
+         };
+       } else {
+        return {
+          response: `🤖 ❌ No token chart response received for ${token}`,
+          latency: Date.now() - startTime,
+        };
+      }
+    } catch (error) {
+      console.error("Error in handleGenerateTokenChart:", error);
+      return {
+        response: `🤖 ❌ Error generating ${token} chart: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
         latency: Date.now() - startTime,
@@ -569,11 +725,11 @@ export class ChatAgent {
 
         const graphResponses = await bus.waitForResponses(
           this.agentName,
-          ["graph_ready"],
+          ["token_chart_ready"],
           30000
         );
         const graphResponse = graphResponses.find(
-          (r) => r.type === "graph_ready"
+          (r) => r.type === "token_chart_ready"
         );
 
         if (!graphResponse) {
@@ -599,6 +755,69 @@ export class ChatAgent {
       } catch (error: any) {
         sendStep("error", {
           message: "Graph generation failed",
+          error: error.message || String(error),
+          agent: "system",
+        });
+      }
+    } else if (intent.type === "generate_token_chart") {
+      // Step 1: Token Chart Generation
+      const token = intent.token || "HBAR";
+      const timeframe = intent.timeframe || "24h";
+      const chartType = intent.chartType || "price";
+      
+      sendStep("token_chart_start", {
+        message: `📈 Generating ${chartType} chart for ${token} (${timeframe})...`,
+        agent: "graph@portfolio.guard",
+        token,
+        timeframe,
+        chartType,
+      });
+
+      try {
+        bus.sendMessage({
+          from: this.agentName,
+          to: "graph@portfolio.guard",
+          type: "generate_token_chart",
+          payload: { 
+            token,
+            timeframe,
+            chartType: chartType === "history" ? "price" : chartType,
+            userId 
+          },
+        });
+
+        const graphResponses = await bus.waitForResponses(
+          this.agentName,
+          ["graph_ready"],
+          30000
+        );
+        const graphResponse = graphResponses.find(
+          (r) => r.type === "graph_ready"
+        );
+
+        if (!graphResponse) {
+          throw new Error("No token chart response received");
+        }
+
+        sendStep("token_chart_complete", {
+          message: `✅ ${token} ${chartType} chart generated successfully`,
+          data: graphResponse.payload,
+          agent: "graph@portfolio.guard",
+          token,
+          timeframe,
+        });
+
+        const latency = Date.now() - startTime;
+        sendStep("summary", {
+          message: "Token Chart Generation Complete",
+          response: `📈 Generated ${chartType} chart for ${token} over ${timeframe} timeframe`,
+          graphs: graphResponse.payload.graphs,
+          latency: latency,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (error: any) {
+        sendStep("error", {
+          message: "Token chart generation failed",
           error: error.message || String(error),
           agent: "system",
         });
