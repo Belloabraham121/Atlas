@@ -5,6 +5,8 @@ import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Dithering } from "@paper-design/shaders-react"
+import { useAccount } from "wagmi"
+import WalletConnection from "@/components/WalletConnection"
 import Link from "next/link"
 
 interface Message {
@@ -22,12 +24,14 @@ interface ChatSession {
 }
 
 export function ChatInterface() {
+  const { isConnected, address } = useAccount()
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
       role: "assistant",
-      content:
-        "Hello! I'm ATLAS, your AI-powered Hedera portfolio intelligence assistant. How can I help you today? You can ask me about portfolio analysis, risk assessment, market trends, or any questions about your Hedera investments.",
+      content: address
+        ? `Hello! I'm ATLAS, your AI-powered Hedera portfolio intelligence assistant. I can see you're connected with account ${address}. How can I help you today? You can ask me about portfolio analysis, risk assessment, market trends, or any questions about your Hedera investments.`
+        : "Hello! I'm ATLAS, your AI-powered Hedera portfolio intelligence assistant. How can I help you today? You can ask me about portfolio analysis, risk assessment, market trends, or any questions about your Hedera investments.",
       timestamp: new Date(),
     },
   ])
@@ -144,6 +148,56 @@ export function ChatInterface() {
         timestamp: new Date(),
       },
     ])
+  }
+
+  // Show wallet connection screen if not connected
+  if (!isConnected) {
+    return (
+      <div className="relative w-full min-h-screen flex flex-col overflow-hidden">
+        {/* Background with dithering effect */}
+        <div className="fixed inset-0 z-0">
+          <Dithering
+            colorBack="#00000000"
+            colorFront="#614B00"
+            speed={0.43}
+            shape="wave"
+            type="4x4"
+            pxSize={3}
+            scale={1.13}
+            style={{
+              backgroundColor: "#000000",
+              height: "100vh",
+              width: "100vw",
+            }}
+          />
+        </div>
+
+        {/* Header */}
+        <div className="relative z-20 border-b border-gray-600/30 backdrop-blur-sm">
+          <div className="px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+            <Link href="/">
+              <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
+                <div className="w-6 h-6 bg-white rounded flex items-center justify-center">
+                  <span className="text-black font-bold text-xs">A</span>
+                </div>
+                <span className="text-white font-bold text-sm hidden sm:inline">ATLAS</span>
+              </div>
+            </Link>
+            <div className="text-gray-400 text-sm flex-1 text-center">Connect Wallet to Continue</div>
+            <Link href="/">
+              <Button variant="ghost" className="text-gray-400 hover:text-white text-sm">
+                Back to Home
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+        {/* Wallet Connection Content */}
+        <div className="relative z-10 flex-1 flex items-center justify-center p-4">
+          <WalletConnection />
+        </div>
+      </div>
+    )
   }
 
   return (
