@@ -5,7 +5,8 @@ import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Dithering } from "@paper-design/shaders-react"
-import { useAccount } from "wagmi"
+import { useAccount, useDisconnect } from "wagmi"
+import { useConnectModal } from "@rainbow-me/rainbowkit"
 import WalletConnection from "@/components/WalletConnection"
 import Link from "next/link"
 
@@ -25,6 +26,8 @@ interface ChatSession {
 
 export function ChatInterface() {
   const { isConnected, address } = useAccount()
+  const { disconnect } = useDisconnect()
+  const { openConnectModal } = useConnectModal()
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
@@ -293,6 +296,35 @@ export function ChatInterface() {
                 {chat.title}
               </button>
             ))}
+          </div>
+
+          {/* Wallet Section */}
+          <div className="p-4 border-t border-gray-600/30">
+            <div className="text-xs text-gray-500 font-semibold px-2 mb-3">WALLET</div>
+            {isConnected ? (
+              <div className="space-y-3">
+                <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
+                  <p className="text-green-400 text-xs font-medium mb-1">Connected</p>
+                  <p className="text-white text-sm font-mono break-all">
+                    {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : ''}
+                  </p>
+                </div>
+                <Button 
+                  onClick={() => disconnect()} 
+                  variant="outline"
+                  className="w-full bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 rounded text-sm"
+                >
+                  Disconnect Wallet
+                </Button>
+              </div>
+            ) : (
+              <Button 
+                onClick={openConnectModal}
+                className="w-full bg-white text-black hover:bg-gray-200 rounded text-sm font-semibold"
+              >
+                Connect Wallet
+              </Button>
+            )}
           </div>
         </div>
 

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dithering } from "@paper-design/shaders-react"
 
+
 interface Chart {
   id: string
   title: string
@@ -119,6 +120,8 @@ export function ChartBuilder() {
                 </Button>
               </CardContent>
             </Card>
+
+
           </div>
 
           {/* Chart Editor */}

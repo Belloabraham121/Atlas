@@ -1,42 +1,66 @@
-"use client"
+"use client";
 
-import React from 'react'
-import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { useAccount, useBalance, useConnect, useDisconnect } from 'wagmi'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { CheckCircle, Wallet, AlertTriangle } from 'lucide-react'
+import React from "react";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useAccount, useBalance, useConnect, useDisconnect } from "wagmi";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { CheckCircle, Wallet, AlertTriangle } from "lucide-react";
 
 interface WalletConnectionProps {
-  onConnected?: () => void
+  onConnected?: () => void;
 }
 
 export function WalletConnection({ onConnected }: WalletConnectionProps) {
-  const { address, isConnected, isConnecting, isDisconnected } = useAccount()
+  const { address, isConnected, isConnecting, isDisconnected } = useAccount();
   const { data: balance } = useBalance({
     address: address,
-  })
-  const { connect, connectors, error } = useConnect()
-  const { disconnect } = useDisconnect()
+  });
+  const { connect, connectors, error } = useConnect();
+  const { disconnect } = useDisconnect();
 
   // Debug wallet state
   React.useEffect(() => {
-    console.log('Wallet State:', {
+    console.log("🔍 WalletConnection Debug - Wallet State:", {
       isConnected,
       isConnecting,
       isDisconnected,
       address,
-      connectors: connectors.map(c => ({ id: c.id, name: c.name, ready: c.ready })),
-      error: error?.message
-    })
-  }, [isConnected, isConnecting, isDisconnected, address, connectors, error])
+      connectors: connectors.map((c) => ({
+        id: c.id,
+        name: c.name,
+        ready: c.ready,
+        type: c.type,
+      })),
+      error: error?.message,
+      totalConnectors: connectors.length,
+      readyConnectors: connectors.filter((c) => c.ready).length,
+    });
+
+    // Log each connector details
+    connectors.forEach((connector, index) => {
+      console.log(`🔌 Connector ${index + 1}:`, {
+        id: connector.id,
+        name: connector.name,
+        ready: connector.ready,
+        type: connector.type,
+        icon: connector.icon,
+      });
+    });
+  }, [isConnected, isConnecting, isDisconnected, address, connectors, error]);
 
   // Handle successful connection
   React.useEffect(() => {
     if (isConnected && onConnected) {
-      onConnected()
+      onConnected();
     }
-  }, [isConnected, onConnected])
+  }, [isConnected, onConnected]);
 
   if (isConnected && address) {
     return (
@@ -53,14 +77,18 @@ export function WalletConnection({ onConnected }: WalletConnectionProps) {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-muted-foreground">Address:</span>
+              <span className="text-sm font-medium text-muted-foreground">
+                Address:
+              </span>
               <span className="text-sm font-mono">
                 {address.slice(0, 6)}...{address.slice(-4)}
               </span>
             </div>
             {balance && (
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-muted-foreground">Balance:</span>
+                <span className="text-sm font-medium text-muted-foreground">
+                  Balance:
+                </span>
                 <span className="text-sm font-medium">
                   {parseFloat(balance.formatted).toFixed(4)} {balance.symbol}
                 </span>
@@ -76,11 +104,17 @@ export function WalletConnection({ onConnected }: WalletConnectionProps) {
           </Alert>
 
           <div className="flex justify-center">
-            <ConnectButton />
+            <div
+              onClick={() =>
+                console.log("🖱️ Connected state ConnectButton wrapper clicked!")
+              }
+            >
+              <ConnectButton />
+            </div>
           </div>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   return (
@@ -96,9 +130,11 @@ export function WalletConnection({ onConnected }: WalletConnectionProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="text-center">
-          <ConnectButton />
+          <div onClick={() => console.log("🖱️ ConnectButton wrapper clicked!")}>
+            <ConnectButton />
+          </div>
         </div>
-        
+
         {error && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
@@ -119,18 +155,20 @@ export function WalletConnection({ onConnected }: WalletConnectionProps) {
         {!error && !isConnecting && (
           <Alert>
             <AlertDescription>
-              Atlas supports multiple wallets including MetaMask, Rainbow, Coinbase Wallet, and more.
-              Choose your preferred wallet from the options above.
+              Atlas supports multiple wallets including MetaMask, Rainbow,
+              Coinbase Wallet, and more. Choose your preferred wallet from the
+              options above.
             </AlertDescription>
           </Alert>
         )}
 
         <div className="text-xs text-muted-foreground text-center">
-          Available connectors: {connectors.filter(c => c.ready).length} ready, {connectors.length} total
+          Available connectors: {connectors.filter((c) => c.ready).length}{" "}
+          ready, {connectors.length} total
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }
 
-export default WalletConnection
+export default WalletConnection;

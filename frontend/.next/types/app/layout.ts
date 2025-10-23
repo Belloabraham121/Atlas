@@ -1,4 +1,4 @@
-// File: /Users/iteoluwakisibello/Documents/test/Atlas/frontend/app/layout.tsx
+// File: /Users/iteoluwakisibello/Documents/Atlas/frontend/app/layout.tsx
 import * as entry from '../../../app/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
