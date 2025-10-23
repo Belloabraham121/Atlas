@@ -2,6 +2,7 @@ import "dotenv/config";
 import express, { Request, Response } from "express";
 import cors from "cors";
 import usersRouter from "./routes/users.js";
+import chatsRouter from "./routes/chats.js";
 import { agentSwarm } from "./swarm/agentSwarm.js";
 
 const app = express();
@@ -32,6 +33,7 @@ app.get("/swarm/health", async (_req: Request, res: Response) => {
 });
 
 app.use("/api", usersRouter);
+app.use("/api", chatsRouter);
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 

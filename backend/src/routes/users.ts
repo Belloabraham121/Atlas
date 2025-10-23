@@ -7,6 +7,12 @@ import {
 import { analyzeToken, sendXNewsAlert } from "../agents/newsAgent.js";
 import { fetchPriceUSD } from "../services/price.js";
 import { chatAgent } from "../agents/chatAgent.js";
+import {
+  createNewChat,
+  addMessageToChat,
+  getContextualHistory,
+  getUserContext,
+} from "../store/chats.js";
 
 const router = express.Router();
 
@@ -141,12 +147,12 @@ router.post(
     req: Request<
       { userId: string },
       any,
-      { message?: string; timeframe?: string }
+      { message?: string; timeframe?: string; chatId?: string; useContext?: boolean }
     >,
     res: Response
   ) => {
     try {
-      const { message, timeframe } = req.body || {};
+      const { message, timeframe, chatId, useContext = true } = req.body || {};
       const userId = req.params.userId;
 
       if (!message || typeof message !== "string" || !message.trim()) {
@@ -156,19 +162,63 @@ router.post(
         });
       }
 
-      console.log(`💬 Chat request from ${userId}: ${message}`);
+      console.log(`💬 Legacy chat request from ${userId}: ${message}`);
 
-      // Process the message through the Chat Agent
-      const response = await chatAgent.processUserCommand(
+      // Create a new chat if no chatId provided (for backward compatibility)
+      let activeChatId = chatId;
+      if (!activeChatId) {
+        const userContext = getUserContext(userId);
+        if (userContext && userContext.currentChatId) {
+          activeChatId = userContext.currentChatId;
+        } else {
+          const newChat = createNewChat(userId, "Legacy Chat");
+          activeChatId = newChat.id;
+        }
+      }
+
+      // Add user message to chat
+      const userMessage = addMessageToChat(activeChatId, userId, "user", message.trim());
+
+      // Get conversation context if requested
+      let contextHistory: any[] = [];
+      if (useContext) {
+        const history = getContextualHistory(userId, activeChatId);
+        contextHistory = history.slice(-10).map(msg => ({
+          role: msg.role,
+          content: msg.content,
+          timestamp: msg.timestamp,
+        }));
+      }
+
+      // Process the message through the Chat Agent with context
+      const response = await chatAgent.processUserCommandWithContext(
         message.trim(),
-        userId
+        userId,
+        contextHistory
+      );
+
+      // Add assistant response to chat
+      const assistantMessage = addMessageToChat(
+        activeChatId,
+        userId,
+        "assistant",
+        response.response,
+        {
+          graphs: response.graphs,
+          latency: response.latency,
+        }
       );
 
       res.json({
         ok: true,
-        response: response,
+        response: response.response,
+        graphs: response.graphs,
+        latency: response.latency,
         timestamp: new Date().toISOString(),
         user_id: userId,
+        chat_id: activeChatId,
+        user_message: userMessage,
+        assistant_message: assistantMessage,
       });
     } catch (e: any) {
       console.error("Chat endpoint error:", e);
@@ -180,22 +230,37 @@ router.post(
   }
 );
 
-// New streaming chat endpoint
+// Legacy streaming chat endpoint
 router.post(
   "/:userId/chat-stream",
   async (
-    req: Request<{ userId: string }, any, { message?: string }>,
+    req: Request<{ userId: string }, any, { message?: string; chatId?: string; useContext?: boolean }>,
     res: Response
   ) => {
     try {
-      const { message } = req.body || {};
+      const { message, chatId, useContext = true } = req.body || {};
       const { userId } = req.params;
 
       if (!message) {
         return res.status(400).json({ error: "Missing message" });
       }
 
-      console.log(`💬 Streaming chat request from ${userId}: ${message}`);
+      console.log(`💬 Legacy streaming chat request from ${userId}: ${message}`);
+
+      // Create a new chat if no chatId provided (for backward compatibility)
+      let activeChatId = chatId;
+      if (!activeChatId) {
+        const userContext = getUserContext(userId);
+        if (userContext && userContext.currentChatId) {
+          activeChatId = userContext.currentChatId;
+        } else {
+          const newChat = createNewChat(userId, "Legacy Stream Chat");
+          activeChatId = newChat.id;
+        }
+      }
+
+      // Add user message to chat
+      const userMessage = addMessageToChat(activeChatId, userId, "user", message.trim());
 
       // Set up Server-Sent Events
       res.writeHead(200, {
@@ -212,16 +277,57 @@ router.post(
         res.write(`data: ${JSON.stringify(data)}\n\n`);
       };
 
+      // Send user message confirmation
+      sendStep("user_message", { message: userMessage });
+
+      let assistantResponse = "";
+      let responseGraphs: any[] = [];
+
       try {
-        // Process the message through the streaming Chat Agent
-        await chatAgent.processUserCommandStreaming(
+        // Get conversation context if requested
+        let contextHistory: any[] = [];
+        if (useContext) {
+          const history = getContextualHistory(userId, activeChatId);
+          contextHistory = history.slice(-10).map(msg => ({
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.timestamp,
+          }));
+        }
+
+        // Process the message through the streaming Chat Agent with context
+        await chatAgent.processUserCommandStreamingWithContext(
           message.trim(),
           userId,
-          sendStep
+          contextHistory,
+          (step: string, data: any) => {
+            sendStep(step, data);
+            
+            // Capture the final response
+            if (step === "complete" && data.response) {
+              assistantResponse = data.response;
+              responseGraphs = data.graphs || [];
+            }
+          }
         );
 
+        // Add assistant response to chat if we got one
+        if (assistantResponse) {
+          const assistantMessage = addMessageToChat(
+            activeChatId,
+            userId,
+            "assistant",
+            assistantResponse,
+            {
+              graphs: responseGraphs,
+            }
+          );
+          
+          sendStep("assistant_message", { message: assistantMessage });
+        }
+
         // Send completion event
-        sendStep("complete", { message: "Analysis complete" });
+        sendStep("complete", { message: "Analysis complete", chatId: activeChatId });
       } catch (error: any) {
         console.error("Streaming chat error:", error);
         sendStep("error", { error: error.message || String(error) });

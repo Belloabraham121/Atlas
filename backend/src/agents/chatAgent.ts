@@ -832,6 +832,302 @@ export class ChatAgent {
     }
   }
 
+  // Context-aware version of processUserCommand
+  async processUserCommandWithContext(
+    message: string,
+    userId: string,
+    contextHistory: Array<{ role: string; content: string; timestamp: number }> = []
+  ): Promise<{
+    response: string;
+    graphs?: any[];
+    latency: number;
+  }> {
+    const startTime = Date.now();
+
+    console.log(`💬 Processing command with context: "${message}" for user: ${userId}`);
+    console.log(`📚 Context history: ${contextHistory.length} messages`);
+
+    try {
+      // Prepare context-enhanced query for LLM
+      let enhancedQuery = message;
+      if (contextHistory.length > 0) {
+        const contextSummary = this.buildContextSummary(contextHistory);
+        enhancedQuery = `Context from previous conversation:\n${contextSummary}\n\nCurrent message: ${message}`;
+      }
+
+      // Send query to LLM agent for natural language processing
+      bus.sendMessage({
+        type: "llm_query",
+        from: this.agentName,
+        to: "llm@portfolio.guard",
+        payload: { 
+          query: enhancedQuery, 
+          userId,
+          hasContext: contextHistory.length > 0,
+          contextLength: contextHistory.length
+        },
+      });
+
+      // Wait for LLM response (increased timeout for analysis processing)
+      const responses = await bus.waitForResponses(
+        this.agentName,
+        ["llm_response"],
+        30000
+      );
+      const llmResponse = responses[0];
+
+      if (llmResponse && llmResponse.payload.success) {
+        // Check if the LLM response indicates a specific action should be taken
+        const response = llmResponse.payload.response;
+
+        // Parse if LLM suggests specific actions (using original message for intent parsing)
+        const intent = this.parseUserIntent(message, userId);
+
+        if (intent.type === "scan_user") {
+          // Execute scan and combine with LLM insights
+          const scanResult = await this.handleScanUser(
+            intent.userId || userId,
+            intent.token || "all",
+            startTime
+          );
+          return {
+            response: `${response}\n\n${scanResult.response}`,
+            graphs: scanResult.graphs,
+            latency: Date.now() - startTime,
+          };
+        } else if (intent.type === "generate_graph") {
+          // Execute graph generation and combine with LLM insights
+          const graphResult = await this.handleGenerateGraph(
+            intent.userId || userId,
+            startTime
+          );
+          return {
+            response: `${response}\n\n${graphResult.response}`,
+            graphs: graphResult.graphs,
+            latency: Date.now() - startTime,
+          };
+        } else if (intent.type === "generate_token_chart") {
+          // Execute token chart generation and combine with LLM insights
+          const tokenChartResult = await this.handleGenerateTokenChart(
+            intent.token || "HBAR",
+            intent.timeframe || "24h",
+            intent.chartType || "price",
+            intent.userId || userId,
+            startTime
+          );
+          return {
+            response: `${response}\n\n${tokenChartResult.response}`,
+            graphs: tokenChartResult.graphs,
+            latency: Date.now() - startTime,
+          };
+        } else {
+          // Return LLM response for general queries
+          return {
+            response: response,
+            latency: Date.now() - startTime,
+          };
+        }
+      } else {
+        // Fallback to original parsing if LLM fails
+        const intent = this.parseUserIntent(message, userId);
+
+        if (intent.type === "scan_user") {
+          return await this.handleScanUser(
+            intent.userId || userId,
+            intent.token || "all",
+            startTime
+          );
+        } else if (intent.type === "generate_graph") {
+          return await this.handleGenerateGraph(
+            intent.userId || userId,
+            startTime
+          );
+        } else if (intent.type === "generate_token_chart") {
+          return await this.handleGenerateTokenChart(
+            intent.token || "HBAR",
+            intent.timeframe || "24h",
+            intent.chartType || "price",
+            intent.userId || userId,
+            startTime
+          );
+        } else {
+          return {
+            response: "I'm sorry, I couldn't understand your request. Could you please rephrase it?",
+            latency: Date.now() - startTime,
+          };
+        }
+      }
+    } catch (error: any) {
+      console.error("Chat agent error:", error);
+      return {
+        response: `I encountered an error while processing your request: ${error?.message || String(error)}`,
+        latency: Date.now() - startTime,
+      };
+    }
+  }
+
+  // Context-aware version of processUserCommandStreaming
+  async processUserCommandStreamingWithContext(
+    message: string,
+    userId: string,
+    contextHistory: Array<{ role: string; content: string; timestamp: number }> = [],
+    sendStep: (step: string, data: any) => void
+  ): Promise<void> {
+    console.log(`💬 Processing streaming command with context: "${message}" for user: ${userId}`);
+    console.log(`📚 Context history: ${contextHistory.length} messages`);
+
+    try {
+      // Prepare context-enhanced query for LLM
+      let enhancedQuery = message;
+      if (contextHistory.length > 0) {
+        const contextSummary = this.buildContextSummary(contextHistory);
+        enhancedQuery = `Context from previous conversation:\n${contextSummary}\n\nCurrent message: ${message}`;
+        
+        sendStep("context", { 
+          message: "Using conversation context", 
+          contextLength: contextHistory.length 
+        });
+      }
+
+      // Send initial processing step
+      sendStep("processing", { message: "Analyzing your request..." });
+
+      // Parse user intent first
+      const intent = this.parseUserIntent(message, userId);
+      sendStep("intent", { 
+        message: `Detected intent: ${intent.type}`, 
+        intent: intent 
+      });
+
+      if (intent.type === "scan_user") {
+        sendStep("action", { message: "Scanning user portfolio..." });
+        
+        // Execute scan
+        const scanResult = await this.handleScanUser(
+          intent.userId || userId,
+          intent.token || "all",
+          Date.now()
+        );
+        
+        sendStep("scan_complete", { 
+          message: "Portfolio scan completed",
+          graphs: scanResult.graphs 
+        });
+        
+        sendStep("complete", { 
+          response: scanResult.response,
+          graphs: scanResult.graphs,
+          latency: scanResult.latency
+        });
+        
+      } else if (intent.type === "generate_graph") {
+        sendStep("action", { message: "Generating portfolio graph..." });
+        
+        const graphResult = await this.handleGenerateGraph(
+          intent.userId || userId,
+          Date.now()
+        );
+        
+        sendStep("graph_complete", { 
+          message: "Graph generation completed",
+          graphs: graphResult.graphs 
+        });
+        
+        sendStep("complete", { 
+          response: graphResult.response,
+          graphs: graphResult.graphs,
+          latency: graphResult.latency
+        });
+        
+      } else if (intent.type === "generate_token_chart") {
+        sendStep("action", { message: `Generating ${intent.token} chart...` });
+        
+        const tokenChartResult = await this.handleGenerateTokenChart(
+          intent.token || "HBAR",
+          intent.timeframe || "24h",
+          intent.chartType || "price",
+          intent.userId || userId,
+          Date.now()
+        );
+        
+        sendStep("chart_complete", { 
+          message: "Token chart generation completed",
+          graphs: tokenChartResult.graphs 
+        });
+        
+        sendStep("complete", { 
+          response: tokenChartResult.response,
+          graphs: tokenChartResult.graphs,
+          latency: tokenChartResult.latency
+        });
+        
+      } else {
+        // For general queries, use LLM with context
+        sendStep("llm_query", { message: "Consulting AI assistant..." });
+        
+        bus.sendMessage({
+          type: "llm_query",
+          from: this.agentName,
+          to: "llm@portfolio.guard",
+          payload: { 
+            query: enhancedQuery, 
+            userId,
+            hasContext: contextHistory.length > 0,
+            contextLength: contextHistory.length
+          },
+        });
+
+        // Wait for LLM response
+        const responses = await bus.waitForResponses(
+          this.agentName,
+          ["llm_response"],
+          30000
+        );
+        const llmResponse = responses[0];
+
+        if (llmResponse && llmResponse.payload.success) {
+          sendStep("llm_complete", { message: "AI analysis completed" });
+          sendStep("complete", { 
+            response: llmResponse.payload.response,
+            latency: Date.now() - Date.now()
+          });
+        } else {
+          sendStep("error", { 
+            error: "Failed to get AI response" 
+          });
+        }
+      }
+    } catch (error: any) {
+      console.error("Streaming chat agent error:", error);
+      sendStep("error", { 
+        error: error?.message || String(error) 
+      });
+    }
+  }
+
+  private buildContextSummary(contextHistory: Array<{ role: string; content: string; timestamp: number }>): string {
+    // Build a concise summary of the conversation context
+    const recentMessages = contextHistory.slice(-6); // Last 6 messages for context
+    
+    return recentMessages.map(msg => {
+      const timeAgo = this.getTimeAgo(msg.timestamp);
+      return `${msg.role === 'user' ? 'User' : 'Assistant'} (${timeAgo}): ${msg.content.substring(0, 150)}${msg.content.length > 150 ? '...' : ''}`;
+    }).join('\n');
+  }
+
+  private getTimeAgo(timestamp: number): string {
+    const now = Date.now();
+    const diff = now - timestamp;
+    const minutes = Math.floor(diff / (1000 * 60));
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+    if (days > 0) return `${days}d ago`;
+    if (hours > 0) return `${hours}h ago`;
+    if (minutes > 0) return `${minutes}m ago`;
+    return 'just now';
+  }
+
   destroy(): void {
     bus.unregisterAgent(this.agentName);
   }
