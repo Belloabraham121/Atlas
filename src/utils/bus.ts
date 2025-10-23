@@ -4,9 +4,14 @@ import { v4 as uuidv4 } from "uuid";
 export type XNewsAlertPayload = {
   userId: string;
   token: string;
-  sentiment: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL';
+  sentiment: "POSITIVE" | "NEGATIVE" | "NEUTRAL";
   priceUSD?: number;
-  headlines?: Array<{ title: string; source?: string; url: string; publishedAt?: string }>;
+  headlines?: Array<{
+    title: string;
+    source?: string;
+    url: string;
+    publishedAt?: string;
+  }>;
   timestamp: string;
   error?: string;
 };
@@ -36,12 +41,15 @@ export interface BalanceUpdatePayload {
 
 export interface RiskSummaryPayload {
   userId: string;
-  tokens: Record<string, {
-    wallet_delta: number;
-    x_volume_spike: string;
-    risk: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'SAFE';
-    top_tweets?: string[];
-  }>;
+  tokens: Record<
+    string,
+    {
+      wallet_delta: number;
+      x_volume_spike: string;
+      risk: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "SAFE";
+      top_tweets?: string[];
+    }
+  >;
   total_value: number;
   change_24h: number;
   onchain_proof?: string;
@@ -71,32 +79,42 @@ export class A2ABus extends EventEmitter {
     console.log(`🤖 Agent unregistered: ${agentName}`);
   }
 
-  sendMessage(message: Omit<A2AMessage, 'id' | 'timestamp'>): void {
+  sendMessage(message: Omit<A2AMessage, "id" | "timestamp">): void {
     const fullMessage: A2AMessage = {
       ...message,
       id: uuidv4(),
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
 
     this.messageHistory.push(fullMessage);
-    
+
     // Log A2A communication
-    console.log(`📡 A2A: ${fullMessage.from} → ${fullMessage.to} [${fullMessage.type}]`);
-    
+    console.log(
+      `📡 A2A: ${fullMessage.from} → ${fullMessage.to} [${fullMessage.type}]`
+    );
+
     // Emit to specific agent
     this.emit(`message:${fullMessage.to}`, fullMessage);
-    
+
     // Also emit general message event for monitoring
-    this.emit('a2a_message', fullMessage);
+    this.emit("a2a_message", fullMessage);
   }
 
-  waitForResponses(agentName: string, expectedTypes: string[], timeoutMs: number = 3000): Promise<A2AMessage[]> {
+  waitForResponses(
+    agentName: string,
+    expectedTypes: string[],
+    timeoutMs: number = 3000
+  ): Promise<A2AMessage[]> {
     return new Promise((resolve, reject) => {
       const responses: A2AMessage[] = [];
       const expectedCount = expectedTypes.length;
-      
+
       const timeout = setTimeout(() => {
-        reject(new Error(`Timeout waiting for responses: ${expectedTypes.join(', ')}`));
+        reject(
+          new Error(
+            `Timeout waiting for responses: ${expectedTypes.join(", ")}`
+          )
+        );
       }, timeoutMs);
 
       const messageHandler = (message: A2AMessage) => {
