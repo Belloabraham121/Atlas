@@ -1,9 +1,4 @@
-import {
-  bus,
-  A2AMessage,
-  RiskSummaryPayload,
-  GraphReadyPayload,
-} from "../utils/bus.js";
+import { bus, RiskSummaryPayload, GraphReadyPayload } from "../utils/bus.js";
 
 export class ChatAgent {
   private agentName = "chat@portfolio.guard";
