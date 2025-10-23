@@ -9,6 +9,7 @@
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
+    "downlevelIteration": true,
     "rootDir": "src",
     "outDir": "dist"
   },
