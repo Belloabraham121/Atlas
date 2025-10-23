@@ -1,7 +1,13 @@
 import { resolveAccountId, detectTokensForAccount } from "../utils/hedera.js";
 import { getAccountHoldings } from "../utils/hedera.js";
 import { getUser, updateUser, UserProfile } from "../store/users.js";
-import { bus, XNewsAlertPayload, A2AMessage, BalanceUpdatePayload, RiskSummaryPayload } from "../utils/bus.js";
+import {
+  bus,
+  XNewsAlertPayload,
+  A2AMessage,
+  BalanceUpdatePayload,
+  RiskSummaryPayload,
+} from "../utils/bus.js";
 
 // Listen for A2A x_news_alerts and update user risk/profile
 bus.on("x_news_alert", (payload: XNewsAlertPayload) => {
@@ -60,12 +66,15 @@ export async function getHoldings(userId: string) {
 
 // A2A Portfolio Agent Class
 export class PortfolioAgent {
-  private agentName = 'portfolio@portfolio.guard';
-  private pendingData: Map<string, {
-    balanceUpdates: Map<string, BalanceUpdatePayload>;
-    xNewsAlerts: Map<string, any>;
-    timestamp: number;
-  }> = new Map();
+  private agentName = "portfolio@portfolio.guard";
+  private pendingData: Map<
+    string,
+    {
+      balanceUpdates: Map<string, BalanceUpdatePayload>;
+      xNewsAlerts: Map<string, any>;
+      timestamp: number;
+    }
+  > = new Map();
 
   constructor() {
     bus.registerAgent(this.agentName);
@@ -74,34 +83,40 @@ export class PortfolioAgent {
 
   private setupMessageHandlers(): void {
     bus.on(`message:${this.agentName}`, (message: A2AMessage) => {
-      console.log(`📊 Portfolio Agent received: ${message.type} from ${message.from}`);
+      console.log(
+        `📊 Portfolio Agent received: ${message.type} from ${message.from}`
+      );
       this.handleMessage(message);
     });
   }
 
   private async handleMessage(message: A2AMessage): Promise<void> {
     switch (message.type) {
-      case 'balance_update':
+      case "balance_update":
         await this.handleBalanceUpdate(message);
         break;
-      case 'x_news_alert':
+      case "x_news_alert":
         await this.handleXNewsAlert(message);
         break;
       default:
-        console.log(`❓ Portfolio Agent: Unknown message type: ${message.type}`);
+        console.log(
+          `❓ Portfolio Agent: Unknown message type: ${message.type}`
+        );
     }
   }
 
   private async handleBalanceUpdate(message: A2AMessage): Promise<void> {
     const payload = message.payload as BalanceUpdatePayload;
-    console.log(`📊 Received balance update for ${payload.userId}: ${payload.token}`);
+    console.log(
+      `📊 Received balance update for ${payload.userId}: ${payload.token}`
+    );
 
     // Store balance update
     if (!this.pendingData.has(payload.userId)) {
       this.pendingData.set(payload.userId, {
         balanceUpdates: new Map(),
         xNewsAlerts: new Map(),
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
     }
 
@@ -114,14 +129,16 @@ export class PortfolioAgent {
 
   private async handleXNewsAlert(message: A2AMessage): Promise<void> {
     const payload = message.payload;
-    console.log(`📊 Received X news alert for ${payload.userId}: ${payload.token}`);
+    console.log(
+      `📊 Received X news alert for ${payload.userId}: ${payload.token}`
+    );
 
     // Store X news alert
     if (!this.pendingData.has(payload.userId)) {
       this.pendingData.set(payload.userId, {
         balanceUpdates: new Map(),
         xNewsAlerts: new Map(),
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
     }
 
@@ -159,29 +176,29 @@ export class PortfolioAgent {
     // Process balance updates
     for (const [tokenSymbol, balanceUpdate] of userData.balanceUpdates) {
       const xAlert = userData.xNewsAlerts.get(tokenSymbol);
-      
+
       // Calculate risk based on sentiment and wallet delta
-      let risk: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'SAFE' = 'MEDIUM';
-      
+      let risk: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "SAFE" = "MEDIUM";
+
       if (balanceUpdate.delta && balanceUpdate.delta < -1000) {
-        risk = 'CRITICAL';
-      } else if (xAlert && xAlert.sentiment === 'NEGATIVE') {
-        risk = 'HIGH';
-      } else if (xAlert && xAlert.sentiment === 'POSITIVE') {
-        risk = 'LOW';
+        risk = "CRITICAL";
+      } else if (xAlert && xAlert.sentiment === "NEGATIVE") {
+        risk = "HIGH";
+      } else if (xAlert && xAlert.sentiment === "POSITIVE") {
+        risk = "LOW";
       } else if (balanceUpdate.delta && balanceUpdate.delta > 0) {
-        risk = 'SAFE';
+        risk = "SAFE";
       }
 
       tokens[tokenSymbol] = {
         wallet_delta: balanceUpdate.delta || 0,
-        x_volume_spike: xAlert?.volume_spike || '0%',
+        x_volume_spike: xAlert?.volume_spike || "0%",
         risk: risk,
-        top_tweets: xAlert?.top_tweets || []
+        top_tweets: xAlert?.top_tweets || [],
       };
 
       // Calculate portfolio value (simplified)
-      if (tokenSymbol === 'HBAR') {
+      if (tokenSymbol === "HBAR") {
         totalValue += balanceUpdate.balance * 0.05; // Assume $0.05 per HBAR
         totalChange += (balanceUpdate.delta || 0) * 0.05;
       } else {
@@ -198,15 +215,17 @@ export class PortfolioAgent {
       tokens,
       total_value: Math.round(totalValue),
       change_24h: Math.round(changePercent * 100) / 100,
-      onchain_proof: `0.0.${Math.floor(Math.random() * 100000)}:${Math.random().toString(36).substring(7)}`
+      onchain_proof: `0.0.${Math.floor(Math.random() * 100000)}:${Math.random()
+        .toString(36)
+        .substring(7)}`,
     };
 
     // Send risk summary to chat agent
     bus.sendMessage({
-      type: 'risk_summary',
+      type: "risk_summary",
       from: this.agentName,
-      to: 'chat@portfolio.guard',
-      payload: riskSummary
+      to: "chat@portfolio.guard",
+      payload: riskSummary,
     });
 
     // Clean up pending data

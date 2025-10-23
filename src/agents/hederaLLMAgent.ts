@@ -250,18 +250,24 @@ Keep responses concise but informative.`);
 
       // Now let the LLM handle the raw data naturally
       if (!this.llm) {
-        return `Analysis data for ${address}: ${JSON.stringify(analysisData, null, 2)}`;
+        return `Analysis data for ${address}: ${JSON.stringify(
+          analysisData,
+          null,
+          2
+        )}`;
       }
 
-      const systemMessage = new SystemMessage(`You are PortfolioGuard, an AI assistant specialized in Hedera network portfolio analysis.
+      const systemMessage = new SystemMessage(
+        `You are PortfolioGuard, an AI assistant specialized in Hedera network portfolio analysis.
+        You have received raw analysis data for address ${address}. 
+        Analyze this data and provide insights in a natural, conversational way.
+        The user asked: "${originalQuery}"
+        Provide a helpful response based on the analysis data. 
+        Be natural and conversational, not overly formatted.`
+      );
 
-You have received raw analysis data for address ${address}. Analyze this data and provide insights in a natural, conversational way.
-
-The user asked: "${originalQuery}"
-
-Provide a helpful response based on the analysis data. Be natural and conversational, not overly formatted.`);
-
-      const humanMessage = new HumanMessage(`Here is the analysis data for ${address}:
+      const humanMessage =
+        new HumanMessage(`Here is the analysis data for ${address}:
 
 ${JSON.stringify(analysisData, null, 2)}
 
@@ -269,16 +275,11 @@ Please analyze this data and respond to the user's query: "${originalQuery}"`);
 
       const llmResponse = await this.llm.invoke([systemMessage, humanMessage]);
       return llmResponse.content as string;
-
     } catch (error: any) {
       console.error(`Error analyzing address ${address}:`, error);
       return `I encountered an issue analyzing address ${address}: ${error.message}. Please try again.`;
     }
   }
-
-
-
-
 
   private generateFallbackResponse(query: string, userId: string): string {
     const lowerQuery = query.toLowerCase();
