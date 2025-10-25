@@ -1,113 +1,132 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { useState, useRef, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
-import { Dithering } from "@paper-design/shaders-react"
-import { useAccount, useDisconnect } from "wagmi"
-import { useConnectModal } from "@rainbow-me/rainbowkit"
-import WalletConnection from "@/components/WalletConnection"
-import Link from "next/link"
-import { useChatStream } from "@/hooks/use-chat-stream"
-import { MessageContent } from "@/components/MessageContent"
+import type React from "react";
+import { useState, useRef, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { Dithering } from "@paper-design/shaders-react";
+import { useAccount, useDisconnect } from "wagmi";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
+import WalletConnection from "@/components/WalletConnection";
+import Link from "next/link";
+import { useChatStream } from "@/hooks/use-chat-stream";
+import { MessageContent } from "@/components/MessageContent";
 
 interface Message {
-  id: string
-  role: "user" | "assistant"
-  content: string
-  timestamp: Date
-  isStreaming?: boolean
-  graphs?: any[]
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: Date;
+  isStreaming?: boolean;
+  graphs?: any[];
 }
 
 interface ChatSession {
-  id: string
-  title: string
-  timestamp: Date
-  messageCount: number
+  id: string;
+  title: string;
+  timestamp: Date;
+  messageCount: number;
 }
 
 export function ChatInterface() {
-  const { isConnected, address } = useAccount()
-  const { disconnect } = useDisconnect()
-  const { openConnectModal } = useConnectModal()
-  
+  const { isConnected, address } = useAccount();
+  const { disconnect } = useDisconnect();
+  const { openConnectModal } = useConnectModal();
+
   // Use the streaming chat hook
-  const { 
-    messages: streamMessages, 
-    isStreaming, 
-    error: streamError, 
-    sendMessage, 
+  const {
+    messages: streamMessages,
+    isStreaming,
+    error: streamError,
+    sendMessage,
     clearMessages,
     isConnected: isStreamConnected,
-    hederaAccountId 
-  } = useChatStream()
-  
-  const [input, setInput] = useState("")
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+    hederaAccountId,
+  } = useChatStream();
+
+  const [input, setInput] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([
-    { id: "1", title: "Portfolio Analysis", timestamp: new Date(Date.now() - 86400000), messageCount: 12 },
-    { id: "2", title: "Risk Assessment", timestamp: new Date(Date.now() - 172800000), messageCount: 8 },
-    { id: "3", title: "Market Trends", timestamp: new Date(Date.now() - 259200000), messageCount: 15 },
-  ])
-  const [activeChatId, setActiveChatId] = useState<string | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
+    {
+      id: "1",
+      title: "Portfolio Analysis",
+      timestamp: new Date(Date.now() - 86400000),
+      messageCount: 12,
+    },
+    {
+      id: "2",
+      title: "Risk Assessment",
+      timestamp: new Date(Date.now() - 172800000),
+      messageCount: 8,
+    },
+    {
+      id: "3",
+      title: "Market Trends",
+      timestamp: new Date(Date.now() - 259200000),
+      messageCount: 15,
+    },
+  ]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Initialize with welcome message when connected
-  const [hasInitialized, setHasInitialized] = useState(false)
-  
+  const [hasInitialized, setHasInitialized] = useState(false);
+
   useEffect(() => {
     if (isConnected && hederaAccountId && !hasInitialized) {
       // Clear any existing messages and show welcome message
-      clearMessages()
-      setHasInitialized(true)
+      clearMessages();
+      setHasInitialized(true);
     } else if (!isConnected) {
-      setHasInitialized(false)
+      setHasInitialized(false);
     }
-  }, [isConnected, hederaAccountId, hasInitialized, clearMessages])
+  }, [isConnected, hederaAccountId, hasInitialized, clearMessages]);
 
   // Use streaming messages, but add welcome message if empty
-  const messages = streamMessages.length === 0 && isConnected ? [
-    {
-      id: "welcome",
-      role: "assistant" as const,
-      content: `Hello! I'm ATLAS, your AI-powered Hedera portfolio intelligence assistant. I can see you're connected with wallet ${hederaAccountId}. How can I help you today? You can ask me about portfolio analysis, risk assessment, market trends, or any questions about your Hedera investments.`,
-      timestamp: new Date(),
-    }
-  ] : streamMessages
+  const messages =
+    streamMessages.length === 0 && isConnected
+      ? [
+          {
+            id: "welcome",
+            role: "assistant" as const,
+            content: `Hello! I'm ATLAS, your AI-powered Hedera portfolio intelligence assistant. I can see you're connected with wallet ${hederaAccountId}. How can I help you today? You can ask me about portfolio analysis, risk assessment, market trends, or any questions about your Hedera investments.`,
+            timestamp: new Date(),
+          },
+        ]
+      : streamMessages;
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   useEffect(() => {
-    scrollToBottom()
-  }, [messages])
+    scrollToBottom();
+  }, [messages]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!input.trim() || isStreaming) return
+    e.preventDefault();
+    if (!input.trim() || isStreaming) return;
 
     // Use the streaming hook to send the message
-    await sendMessage(input)
-    setInput("")
-  }
+    await sendMessage(input);
+    setInput("");
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-      e.preventDefault()
-      handleSendMessage(e as any)
+      e.preventDefault();
+      handleSendMessage(e as any);
     }
-  }
+  };
 
   useEffect(() => {
     if (inputRef.current) {
-      inputRef.current.style.height = "auto"
-      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + "px"
+      inputRef.current.style.height = "auto";
+      inputRef.current.style.height =
+        Math.min(inputRef.current.scrollHeight, 120) + "px";
     }
-  }, [input])
+  }, [input]);
 
   const handleNewChat = () => {
     const newChat: ChatSession = {
@@ -115,17 +134,17 @@ export function ChatInterface() {
       title: "New Chat",
       timestamp: new Date(),
       messageCount: 0,
-    }
-    setChatSessions((prev) => [newChat, ...prev])
-    setActiveChatId(newChat.id)
-    clearMessages()
-  }
+    };
+    setChatSessions((prev) => [newChat, ...prev]);
+    setActiveChatId(newChat.id);
+    clearMessages();
+  };
 
   const handleSelectChat = (chatId: string) => {
-    setActiveChatId(chatId)
+    setActiveChatId(chatId);
     // In a real app, this would load the chat history from storage
-    clearMessages()
-  }
+    clearMessages();
+  };
 
   // Show wallet connection screen if not connected
   if (!isConnected) {
@@ -157,12 +176,19 @@ export function ChatInterface() {
                 <div className="w-6 h-6 bg-white rounded flex items-center justify-center">
                   <span className="text-black font-bold text-xs">A</span>
                 </div>
-                <span className="text-white font-bold text-sm hidden sm:inline">ATLAS</span>
+                <span className="text-white font-bold text-sm hidden sm:inline">
+                  ATLAS
+                </span>
               </div>
             </Link>
-            <div className="text-gray-400 text-sm flex-1 text-center">Connect Wallet to Continue</div>
+            <div className="text-gray-400 text-sm flex-1 text-center">
+              Connect Wallet to Continue
+            </div>
             <Link href="/">
-              <Button variant="ghost" className="text-gray-400 hover:text-white text-sm">
+              <Button
+                variant="ghost"
+                className="text-gray-400 hover:text-white text-sm"
+              >
                 Back to Home
               </Button>
             </Link>
@@ -174,7 +200,7 @@ export function ChatInterface() {
           <WalletConnection />
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -206,12 +232,16 @@ export function ChatInterface() {
               <div className="w-6 h-6 bg-white rounded flex items-center justify-center">
                 <span className="text-black font-bold text-xs">A</span>
               </div>
-              <span className="text-white font-bold text-sm hidden sm:inline">ATLAS</span>
+              <span className="text-white font-bold text-sm hidden sm:inline">
+                ATLAS
+              </span>
             </div>
           </Link>
 
           {/* Center: Title */}
-          <div className="text-gray-400 text-sm flex-1 text-center">Portfolio Intelligence Chat</div>
+          <div className="text-gray-400 text-sm flex-1 text-center">
+            Portfolio Intelligence Chat
+          </div>
 
           {/* Right: Hamburger Button and Back Button */}
           <div className="flex items-center gap-3">
@@ -220,12 +250,25 @@ export function ChatInterface() {
               className="p-2 hover:bg-white/10 rounded transition-colors"
               aria-label="Toggle sidebar"
             >
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              <svg
+                className="w-5 h-5 text-white"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
               </svg>
             </button>
             <Link href="/">
-              <Button variant="ghost" className="text-gray-400 hover:text-white text-sm">
+              <Button
+                variant="ghost"
+                className="text-gray-400 hover:text-white text-sm"
+              >
                 Back to Home
               </Button>
             </Link>
@@ -239,7 +282,7 @@ export function ChatInterface() {
         <div
           className={cn(
             "absolute left-0 top-0 h-full bg-black/60 backdrop-blur-sm border-r border-gray-600/30 flex flex-col transition-all duration-300 overflow-hidden",
-            sidebarOpen ? "w-64" : "w-0",
+            sidebarOpen ? "w-64" : "w-0"
           )}
         >
           {/* New Chat Button */}
@@ -254,7 +297,9 @@ export function ChatInterface() {
 
           {/* Chat History */}
           <div className="flex-1 overflow-y-auto p-4 space-y-2">
-            <div className="text-xs text-gray-500 font-semibold px-2 mb-3">CHAT HISTORY</div>
+            <div className="text-xs text-gray-500 font-semibold px-2 mb-3">
+              CHAT HISTORY
+            </div>
             {chatSessions.map((chat) => (
               <button
                 key={chat.id}
@@ -263,7 +308,7 @@ export function ChatInterface() {
                   "w-full text-left px-3 py-2 rounded text-sm transition-colors truncate",
                   activeChatId === chat.id
                     ? "bg-white/20 text-white border border-gray-600/50"
-                    : "text-gray-300 hover:bg-white/10",
+                    : "text-gray-300 hover:bg-white/10"
                 )}
                 title={chat.title}
               >
@@ -274,17 +319,23 @@ export function ChatInterface() {
 
           {/* Wallet Section */}
           <div className="p-4 border-t border-gray-600/30">
-            <div className="text-xs text-gray-500 font-semibold px-2 mb-3">WALLET</div>
+            <div className="text-xs text-gray-500 font-semibold px-2 mb-3">
+              WALLET
+            </div>
             {isConnected ? (
               <div className="space-y-3">
                 <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
-                  <p className="text-green-400 text-xs font-medium mb-1">Connected</p>
+                  <p className="text-green-400 text-xs font-medium mb-1">
+                    Connected
+                  </p>
                   <p className="text-white text-sm font-mono break-all">
-                    {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : ''}
+                    {address
+                      ? `${address.slice(0, 6)}...${address.slice(-4)}`
+                      : ""}
                   </p>
                 </div>
-                <Button 
-                  onClick={() => disconnect()} 
+                <Button
+                  onClick={() => disconnect()}
                   variant="outline"
                   className="w-full bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 rounded text-sm"
                 >
@@ -292,7 +343,7 @@ export function ChatInterface() {
                 </Button>
               </div>
             ) : (
-              <Button 
+              <Button
                 onClick={openConnectModal}
                 className="w-full bg-white text-black hover:bg-gray-200 rounded text-sm font-semibold"
               >
@@ -304,7 +355,10 @@ export function ChatInterface() {
 
         {/* Main Content Area */}
         <div
-          className={cn("relative flex flex-col flex-1 transition-all duration-300", sidebarOpen ? "ml-64" : "ml-0")}
+          className={cn(
+            "relative flex flex-col flex-1 transition-all duration-300",
+            sidebarOpen ? "ml-64" : "ml-0"
+          )}
         >
           {/* Messages Container */}
           <div className="flex-1 overflow-y-auto">
@@ -314,7 +368,7 @@ export function ChatInterface() {
                   key={message.id}
                   className={cn(
                     "flex gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300",
-                    message.role === "user" ? "justify-end" : "justify-start",
+                    message.role === "user" ? "justify-end" : "justify-start"
                   )}
                 >
                   {message.role === "assistant" && (
@@ -327,11 +381,14 @@ export function ChatInterface() {
                       "max-w-2xl rounded-lg px-4 py-3 text-sm leading-relaxed",
                       message.role === "user"
                         ? "bg-white text-black"
-                        : "bg-black/40 backdrop-blur-sm border border-gray-600/30 text-gray-100",
+                        : "bg-black/40 backdrop-blur-sm border border-gray-600/30 text-gray-100"
                     )}
                   >
                     {message.role === "assistant" ? (
-                      <MessageContent content={message.content} />
+                      <MessageContent
+                        content={message.content}
+                        graphs={message.graphs}
+                      />
                     ) : (
                       message.content
                     )}
@@ -385,7 +442,12 @@ export function ChatInterface() {
                   disabled={!input.trim() || isStreaming}
                   className="bg-white text-black hover:bg-gray-200 rounded px-6 py-3 font-semibold flex-shrink-0 h-auto"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -395,11 +457,13 @@ export function ChatInterface() {
                   </svg>
                 </Button>
               </form>
-              <p className="text-xs text-gray-500 mt-2">Press Cmd+Enter or Ctrl+Enter to send</p>
+              <p className="text-xs text-gray-500 mt-2">
+                Press Cmd+Enter or Ctrl+Enter to send
+              </p>
             </div>
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }

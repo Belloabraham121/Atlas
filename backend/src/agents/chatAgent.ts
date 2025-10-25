@@ -164,13 +164,15 @@ export class ChatAgent {
     message: string,
     contextUserId: string
   ): {
-    type: "scan_user" | "generate_graph" | "generate_token_chart" | "unknown";
+    type: "scan_user" | "generate_graph" | "generate_token_chart" | "summary_only" | "unknown";
     userId?: string;
     token?: string;
     chartType?: string;
     timeframe?: string;
     isSelfScan?: boolean;
     needsGraph?: boolean;
+    needsFullAnalysis?: boolean;
+    needsSummaryOnly?: boolean;
   } {
     const lowerMessage = message.toLowerCase();
 
@@ -195,6 +197,20 @@ export class ChatAgent {
       "graph representation", "chart representation", "visual representation"
     ];
     const needsGraph = graphKeywords.some(keyword => lowerMessage.includes(keyword));
+
+    // Check for summary-only keywords
+    const summaryKeywords = [
+      "summary", "summarize", "overview", "brief", "quick look", "tell me about",
+      "what's in", "what does", "describe", "explain", "breakdown"
+    ];
+    const needsSummaryOnly = summaryKeywords.some(keyword => lowerMessage.includes(keyword));
+
+    // Check for full analysis keywords
+    const fullAnalysisKeywords = [
+      "full analysis", "complete analysis", "detailed analysis", "deep dive",
+      "comprehensive", "thorough", "in-depth", "analyze everything"
+    ];
+    const needsFullAnalysis = fullAnalysisKeywords.some(keyword => lowerMessage.includes(keyword));
 
     // Check for self-referential patterns
     const selfPatterns = [
@@ -292,6 +308,8 @@ export class ChatAgent {
         timeframe,
         isSelfScan,
         needsGraph: true,
+        needsFullAnalysis: false,
+        needsSummaryOnly: false,
       };
     }
 
@@ -305,10 +323,26 @@ export class ChatAgent {
         userId: targetUserId,
         isSelfScan,
         needsGraph: true,
+        needsFullAnalysis: false,
+        needsSummaryOnly: false,
       };
     }
+
+    // Check for summary-only requests (new intent type)
+    if (needsSummaryOnly && (targetUserId || isSelfReference)) {
+      return {
+        type: "summary_only" as const,
+        userId: targetUserId,
+        token: "all" as const,
+        isSelfScan,
+        needsGraph: false,
+        needsFullAnalysis: false,
+        needsSummaryOnly: true,
+      };
+    }
+
     // Check for scan/analysis requests
-    else if (
+    if (
       lowerMessage.includes("scan") ||
       lowerMessage.includes("analyze") ||
       (lowerMessage.includes("check") &&
@@ -323,10 +357,17 @@ export class ChatAgent {
         token: "all" as const,
         isSelfScan,
         needsGraph,
+        needsFullAnalysis,
+        needsSummaryOnly: false,
       };
     }
 
-    return { type: "unknown" as const, needsGraph };
+    return { 
+      type: "unknown" as const, 
+      needsGraph,
+      needsFullAnalysis: false,
+      needsSummaryOnly: false,
+    };
   }
 
   private async handleScanUser(
@@ -1037,8 +1078,8 @@ export class ChatAgent {
         
         // Step 1: Scanner Agent with context-aware messaging
         const scanMessage = isSelfScan
-          ? `🔍 Scanning your portfolio (${targetUserId})...`
-          : `🔍 Scanning ${targetUserId}'s portfolio...`;
+          ? `📋 Getting summary of your portfolio (${targetUserId})...`
+          : `📋 Getting summary of ${targetUserId}'s portfolio...`;
 
         sendStep("scanner_start", {
           message: scanMessage,
@@ -1137,57 +1178,42 @@ export class ChatAgent {
           let summaryResponse = `🤖 🔍 PORTFOLIO ANALYSIS: ${targetUserId}\n\n`;
 
           if (analysis.balance) {
-            summaryResponse += `💰 Balance: ${analysis.balance.hbars}\n`;
+            summaryResponse += `💰 **Balance**: ${analysis.balance.hbars}\n`;
             if (analysis.balance.tokens && analysis.balance.tokens.length > 0) {
-              summaryResponse += `🪙 Tokens: ${analysis.balance.tokens.length} different tokens\n`;
+              summaryResponse += `🪙 **Tokens**: ${analysis.balance.tokens.length} different tokens\n`;
+              
+              // Show top 3 tokens by balance
+              const topTokens = analysis.balance.tokens
+                .slice(0, 3)
+                .map((token: any) => `• ${token.symbol || token.tokenId}: ${token.balance}`)
+                .join('\n');
+              summaryResponse += `\n**Top Holdings**:\n${topTokens}\n`;
             }
           }
 
           if (analysis.riskScore !== undefined) {
-            summaryResponse += `⚠️ Risk Score: ${analysis.riskScore}/10\n`;
+            summaryResponse += `\n⚠️ **Risk Score**: ${analysis.riskScore}/10\n`;
           }
 
           if (analysis.marketData) {
-            summaryResponse += `📈 Market Sentiment: ${analysis.marketData.sentiment}\n`;
+            summaryResponse += `📈 **Market Sentiment**: ${analysis.marketData.sentiment}\n`;
           }
 
-          summaryResponse += `\n⏱️ Analysis completed in ${latency}ms`;
+          summaryResponse += `\n⏱️ Summary generated in ${latency}ms`;
+          summaryResponse += `\n\n💡 *For detailed analysis, ask for a "full analysis" or "complete scan"*`;
 
-          sendStep("scan_complete", { 
-            message: "Portfolio scan completed"
+          sendStep("summary_complete", { 
+            message: "Portfolio summary completed"
           });
 
-          // If graph is also requested, generate it
-          if (intent.needsGraph) {
-            sendStep("graph_start", { 
-              message: "📊 Generating portfolio graph..." 
-            });
-            
-            const graphResult = await this.handleGenerateGraph(
-              targetUserId,
-              Date.now()
-            );
-            
-            sendStep("graph_complete", { 
-              message: "✅ Graph generation completed",
-              graphs: graphResult.graphs 
-            });
-            
-            // Combine scan response with graph
-            sendStep("complete", { 
-              response: summaryResponse + "\n\n📊 Portfolio graph generated successfully!",
-              graphs: graphResult.graphs,
-              latency: latency
-            });
-          } else {
-            sendStep("complete", { 
-              response: summaryResponse,
-              latency: latency
-            });
-          }
+          sendStep("complete", { 
+            response: summaryResponse,
+            latency: latency
+          });
+
         } catch (error: any) {
           sendStep("error", {
-            message: "Analysis failed",
+            message: "Summary generation failed",
             error: error.message || String(error),
             agent: "system",
           });
@@ -1234,6 +1260,104 @@ export class ChatAgent {
           latency: tokenChartResult.latency
         });
         
+      } else if (intent.type === "summary_only") {
+        // Summary-only requests: Only use scanner, skip news and LLM for faster response
+        const targetUserId = intent.userId || userId;
+        const isSelfScan = intent.isSelfScan || targetUserId === userId;
+        
+        const scanMessage = isSelfScan
+          ? `📋 Getting summary of your portfolio (${targetUserId})...`
+          : `📋 Getting summary of ${targetUserId}'s portfolio...`;
+
+        sendStep("scanner_start", {
+          message: scanMessage,
+          agent: "scanner@portfolio.guard",
+          isSelfScan,
+          targetAddress: targetUserId,
+        });
+
+        try {
+          // Send analyze address request to scanner
+          bus.sendMessage({
+            from: this.agentName,
+            to: "scanner@portfolio.guard",
+            type: "analyze_address",
+            payload: { address: targetUserId, userId: targetUserId },
+          });
+
+          // Wait for scanner response
+          const responses = await bus.waitForResponses(
+            this.agentName,
+            ["analysis_response"],
+            30000
+          );
+          const scannerResponse = responses.find(
+            (r) => r.type === "analysis_response"
+          );
+
+          if (!scannerResponse) {
+            throw new Error("No scanner response received");
+          }
+
+          const analysisPayload = scannerResponse.payload;
+          if (!analysisPayload.success) {
+            throw new Error(`Scanner analysis failed: ${analysisPayload.error}`);
+          }
+
+          sendStep("scanner_complete", {
+            message: "✅ Portfolio summary ready",
+            data: analysisPayload.analysis,
+            agent: "scanner@portfolio.guard",
+          });
+
+          // Generate quick summary without LLM analysis
+          const latency = Date.now() - startTime;
+          const analysis = analysisPayload.analysis;
+
+          let summaryResponse = `📋 **PORTFOLIO SUMMARY**: ${targetUserId}\n\n`;
+
+          if (analysis.balance) {
+            summaryResponse += `💰 **Balance**: ${analysis.balance.hbars}\n`;
+            if (analysis.balance.tokens && analysis.balance.tokens.length > 0) {
+              summaryResponse += `🪙 **Tokens**: ${analysis.balance.tokens.length} different tokens\n`;
+              
+              // Show top 3 tokens by balance
+              const topTokens = analysis.balance.tokens
+                .slice(0, 3)
+                .map((token: any) => `• ${token.symbol || token.tokenId}: ${token.balance}`)
+                .join('\n');
+              summaryResponse += `\n**Top Holdings**:\n${topTokens}\n`;
+            }
+          }
+
+          if (analysis.riskScore !== undefined) {
+            summaryResponse += `\n⚠️ **Risk Score**: ${analysis.riskScore}/10\n`;
+          }
+
+          if (analysis.marketData) {
+            summaryResponse += `📈 **Market Sentiment**: ${analysis.marketData.sentiment}\n`;
+          }
+
+          summaryResponse += `\n⏱️ Summary generated in ${latency}ms`;
+          summaryResponse += `\n\n💡 *For detailed analysis, ask for a "full analysis" or "complete scan"*`;
+
+          sendStep("summary_complete", { 
+            message: "Portfolio summary completed"
+          });
+
+          sendStep("complete", { 
+            response: summaryResponse,
+            latency: latency
+          });
+
+        } catch (error: any) {
+          sendStep("error", {
+            message: "Summary generation failed",
+            error: error.message || String(error),
+            agent: "system",
+          });
+        }
+        
       } else {
         // For general queries, use LLM with context
         sendStep("llm_query", { message: "Consulting AI assistant..." });
@@ -1270,6 +1394,40 @@ export class ChatAgent {
         } else {
           sendStep("error", { 
             error: "Failed to get AI response" 
+          });
+        }
+      }
+
+      // Handle combined requests (summary + graph)
+      if (intent.needsGraph && (intent.type === "scan_user" || intent.type === "summary_only")) {
+        sendStep("graph_start", { 
+          message: "📊 Generating portfolio graph..." 
+        });
+        
+        try {
+          const targetUserId = intent.userId || userId;
+          const graphResult = await this.handleGenerateGraph(
+            targetUserId,
+            Date.now()
+          );
+          
+          sendStep("graph_complete", { 
+            message: "✅ Graph generation completed",
+            graphs: graphResult.graphs 
+          });
+          
+          // Send updated complete event with graphs
+          sendStep("complete", { 
+            response: "📊 Portfolio analysis and graph generated successfully!",
+            graphs: graphResult.graphs,
+            latency: Date.now() - startTime
+          });
+          
+        } catch (error: any) {
+          sendStep("error", {
+            message: "Graph generation failed",
+            error: error.message || String(error),
+            agent: "graph@portfolio.guard",
           });
         }
       }

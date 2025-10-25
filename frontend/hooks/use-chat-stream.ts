@@ -432,6 +432,26 @@ export function useChatStream(): UseChatStreamReturn {
         return;
       }
 
+      // Check for graph data in the response
+      if (step === 'update' && data?.graphs && Array.isArray(data.graphs) && data.graphs.length > 0) {
+        console.log('📊 Graph data detected:', data);
+        console.log('📈 Graph array:', data.graphs);
+        
+        // Get the response message
+        const responseMessage = data.response || data.message || 'Chart generated';
+        
+        const stepAssistantMessage: ChatStreamMessage = {
+          id: (Date.now() + Math.random()).toString(),
+          role: "assistant",
+          content: responseMessage,
+          timestamp: new Date(),
+          isStreaming: false,
+          graphs: data.graphs // Store graph data for rendering
+        };
+        setMessages((prev) => [...prev, stepAssistantMessage]);
+        return;
+      }
+
       // Skip certain steps that shouldn't be displayed as separate messages
       if (step === "complete" || step === "summary") {
         return;
@@ -549,14 +569,50 @@ export function useChatStream(): UseChatStreamReturn {
           stepMessage = `📊 ${getMessageFromData(data) || "Generating portfolio graph..."}`;
           break;
         case "graph_complete":
+          console.log('📊 graph_complete step data:', data);
           stepMessage = `✅ ${getMessageFromData(data) || "Portfolio graph generated"}`;
+          
+          // Check for graph data in graph_complete step
+          if (data?.graphs && Array.isArray(data.graphs) && data.graphs.length > 0) {
+            console.log('📊 Graph data detected in graph_complete:', data);
+            console.log('📈 Graph array:', data.graphs);
+            
+            const stepAssistantMessage: ChatStreamMessage = {
+              id: (Date.now() + Math.random()).toString(),
+              role: "assistant",
+              content: stepMessage,
+              timestamp: new Date(),
+              isStreaming: false,
+              graphs: data.graphs // Store graph data for rendering
+            };
+            setMessages((prev) => [...prev, stepAssistantMessage]);
+            return;
+          }
           break;
         case "token_chart_start":
           stepMessage = `📈 ${getMessageFromData(data) || "Generating token chart..."}`;
           break;
         case "token_chart_complete":
         case "chart_complete":
+          console.log('📈 token_chart_complete step data:', data);
           stepMessage = `✅ ${getMessageFromData(data) || "Token chart generated"}`;
+          
+          // Check for graph data in chart completion steps
+          if (data?.graphs && Array.isArray(data.graphs) && data.graphs.length > 0) {
+            console.log('📊 Graph data detected in chart_complete:', data);
+            console.log('📈 Graph array:', data.graphs);
+            
+            const stepAssistantMessage: ChatStreamMessage = {
+              id: (Date.now() + Math.random()).toString(),
+              role: "assistant",
+              content: stepMessage,
+              timestamp: new Date(),
+              isStreaming: false,
+              graphs: data.graphs // Store graph data for rendering
+            };
+            setMessages((prev) => [...prev, stepAssistantMessage]);
+            return;
+          }
           break;
         case "update":
           // Handle generic update events
@@ -576,6 +632,9 @@ export function useChatStream(): UseChatStreamReturn {
           content: stepMessage,
           timestamp: new Date(),
           isStreaming: false,
+          // Include graph data for graph-related steps
+          ...(((step === "graph_complete" || step === "token_chart_complete" || step === "chart_complete") && data?.data) ? 
+            { graphs: [data.data] } : {})
         };
         setMessages((prev) => [...prev, stepAssistantMessage]);
       }
