@@ -10,8 +10,10 @@ export class GraphAgent {
   }
 
   private setupMessageHandlers(bus: A2ABus): void {
+    console.log(`🔧 Graph Agent: Setting up message handlers for: message:${this.agentName}`);
     bus.on(`message:${this.agentName}`, (message: A2AMessage) => {
-      console.log(`📈 Graph Agent received: ${message.type} from ${message.from}`);
+      console.log(`📈 Graph Agent received: ${message.type} from ${message.from} to ${message.to}`);
+      console.log(`📈 Graph Agent message payload:`, JSON.stringify(message.payload, null, 2));
       this.handleMessage(message, bus);
     });
   }
@@ -42,19 +44,29 @@ export class GraphAgent {
 
   private async generateGraph(message: A2AMessage, bus: A2ABus): Promise<void> {
     try {
+      console.log(`🎯 Graph Agent: generateGraph called for userId: ${message.payload.userId}`);
       const { userId, timeframe = '24h' } = message.payload;
       const config = this.createChartConfiguration(userId, timeframe);
+      
+      console.log(`📊 Graph Agent: Generated config:`, JSON.stringify(config, null, 2));
+      
+      const payload = {
+        chart_id: `graph_${Date.now()}`,
+        config
+      };
+      
+      console.log(`📤 Graph Agent: Sending graph_ready to ${message.from}`);
       
       bus.sendMessage({
         type: 'graph_ready',
         from: this.agentName,
         to: message.from,
-        payload: {
-          chart_id: `graph_${Date.now()}`,
-          config
-        }
+        payload
       });
+      
+      console.log(`✅ Graph Agent: graph_ready message sent successfully`);
     } catch (error) {
+      console.error(`❌ Graph Agent: Error in generateGraph:`, error);
       this.sendErrorResponse(message, bus, error as Error);
     }
   }

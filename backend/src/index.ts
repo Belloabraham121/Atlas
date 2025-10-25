@@ -32,6 +32,8 @@ app.get("/swarm/health", async (_req: Request, res: Response) => {
   }
 });
 
+
+
 app.use("/api", usersRouter);
 app.use("/api", chatsRouter);
 

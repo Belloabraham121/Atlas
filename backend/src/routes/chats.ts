@@ -208,8 +208,25 @@ router.post(
 
       // Helper function to send SSE data
       const sendStep = (step: string, data: any) => {
-        res.write(`event: ${step}\n`);
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
+        try {
+          const jsonData = JSON.stringify(data, (key, value) => {
+            // Handle circular references and non-serializable objects
+            if (typeof value === 'object' && value !== null) {
+              if (value.constructor && value.constructor.name !== 'Object' && value.constructor.name !== 'Array') {
+                return `[${value.constructor.name}]`;
+              }
+            }
+            return value;
+          });
+          res.write(`event: ${step}\n`);
+          res.write(`data: ${jsonData}\n\n`);
+        } catch (error) {
+          console.error(`Error serializing SSE data for step ${step}:`, error);
+          console.error('Data that failed to serialize:', data);
+          // Send a safe error message instead
+          res.write(`event: ${step}\n`);
+          res.write(`data: ${JSON.stringify({ error: 'Serialization failed', step })}\n\n`);
+        }
       };
 
       // Send user message confirmation

@@ -23,6 +23,7 @@ export class HederaLLMAgent {
   }
 
   private setupMessageHandlers(): void {
+    console.log(`🤖 LLM Agent setting up message handlers for: message:${this.agentName}`);
     bus.on(`message:${this.agentName}`, (message: A2AMessage) => {
       console.log(
         `🤖 LLM Agent received: ${message.type} from ${message.from}`
@@ -51,9 +52,12 @@ export class HederaLLMAgent {
     try {
       const { query, userId } = message.payload;
       console.log(`🤖 Processing LLM query for ${userId}: ${query}`);
+      console.log(`🤖 LLM Agent initialized: ${this.isInitialized}`);
 
       if (!this.isInitialized) {
+        console.log(`🤖 Initializing LLM Agent...`);
         await this.initialize();
+        console.log(`🤖 LLM Agent initialization complete: ${this.isInitialized}`);
       }
 
       // Check if this is an address analysis request
@@ -130,6 +134,7 @@ Keep responses concise but informative.`);
       }
 
       // Send response back to the requesting agent
+      console.log(`🤖 Sending LLM response to ${message.from} for ${userId}`);
       bus.sendMessage({
         type: "llm_response",
         from: this.agentName,
@@ -350,9 +355,8 @@ Try asking me to "analyze my portfolio" or "check my balances"!`;
 
       // Initialize OpenAI LLM
       this.llm = new ChatOpenAI({
-        model: "gpt-4o-mini",
+        model: "gpt-5-nano",
         apiKey: process.env.OPENAI_API_KEY,
-        temperature: 0.7,
       });
 
       // Hedera client setup (optional)

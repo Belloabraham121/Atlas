@@ -10,6 +10,7 @@ import { useConnectModal } from "@rainbow-me/rainbowkit"
 import WalletConnection from "@/components/WalletConnection"
 import Link from "next/link"
 import { useChatStream } from "@/hooks/use-chat-stream"
+import { MessageContent } from "@/components/MessageContent"
 
 interface Message {
   id: string
@@ -329,7 +330,11 @@ export function ChatInterface() {
                         : "bg-black/40 backdrop-blur-sm border border-gray-600/30 text-gray-100",
                     )}
                   >
-                    {message.content}
+                    {message.role === "assistant" ? (
+                      <MessageContent content={message.content} />
+                    ) : (
+                      message.content
+                    )}
                   </div>
                 </div>
               ))}
