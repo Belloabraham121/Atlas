@@ -180,8 +180,8 @@ export class ChatAgent {
     const hederaAccountMatch = lowerMessage.match(/(\d+\.\d+\.\d+)/);
     const userMatch = lowerMessage.match(/user(\w+)/);
 
-    // Extract token symbols and token IDs
-    const tokenSymbolMatch = lowerMessage.match(/\b(hbar|usdc|usdt|btc|eth|matic|ada|dot|link|uni|aave|comp|mkr|snx|yfi|1inch|crv|bal|sushi|alpha|cream|badger|rook|farm|pickle|cover|armor|bond|digg|bnt|knc|lrc|zrx|ren|storj|grt|uma|band|ocean|fet|agi|nmr|rlc|ant|mana|enj|sand|axs|slp|chr|alice|tlm|audio|rari|tribe|fei|rai|lusd|frax|ohm|klima|time|memo|spell|ice|mim|cvx|fxs|alcx)\b/);
+    // Extract token symbols and token IDs (ordered by length to prioritize longer matches)
+    const tokenSymbolMatch = lowerMessage.match(/\b(ethereum|bitcoin|hedera|polygon|cardano|polkadot|chainlink|uniswap|compound|synthetix|balancer|sushiswap|decentraland|numeraire|republic|loopring|alchemix|olympus|liquity|sandbox|chromia|aragon|bancor|iexec|enjin|smooth|alien|convex|maker|yearn|curve|hbar|usdc|usdt|btc|eth|matic|ada|dot|link|uni|aave|comp|mkr|snx|yfi|1inch|crv|bal|sushi|alpha|cream|badger|rook|farm|pickle|cover|armor|bond|digg|bnt|knc|kyber|lrc|zrx|ren|storj|grt|uma|band|ocean|fet|agi|nmr|rlc|ant|mana|enj|sand|axs|axie|slp|chr|alice|tlm|audio|rari|tribe|fei|rai|lusd|frax|ohm|klima|time|memo|spell|ice|mim|cvx|fxs|alcx)\b/);
     const tokenIdMatch = lowerMessage.match(/token\s+(\d+\.\d+\.\d+)/);
     
     // Extract timeframe
@@ -197,6 +197,8 @@ export class ChatAgent {
       "graph representation", "chart representation", "visual representation"
     ];
     const needsGraph = graphKeywords.some(keyword => lowerMessage.includes(keyword));
+    
+
 
     // Check for summary-only keywords
     const summaryKeywords = [
@@ -259,7 +261,46 @@ export class ChatAgent {
     // Determine token for analysis
     let token = "HBAR"; // Default token
     if (tokenSymbolMatch) {
-      token = tokenSymbolMatch[1].toUpperCase();
+      const matchedToken = tokenSymbolMatch[1].toLowerCase();
+      // Map full token names to symbols
+      const tokenMapping: { [key: string]: string } = {
+        'bitcoin': 'BTC',
+        'ethereum': 'ETH',
+        'hedera': 'HBAR',
+        'polygon': 'MATIC',
+        'cardano': 'ADA',
+        'polkadot': 'DOT',
+        'chainlink': 'LINK',
+        'uniswap': 'UNI',
+        'compound': 'COMP',
+        'maker': 'MKR',
+        'synthetix': 'SNX',
+        'yearn': 'YFI',
+        'curve': 'CRV',
+        'balancer': 'BAL',
+        'sushiswap': 'SUSHI',
+        'bancor': 'BNT',
+        'kyber': 'KNC',
+        'loopring': 'LRC',
+        'republic': 'REN',
+        'graph': 'GRT',
+        'numeraire': 'NMR',
+        'iexec': 'RLC',
+        'aragon': 'ANT',
+        'decentraland': 'MANA',
+        'enjin': 'ENJ',
+        'sandbox': 'SAND',
+        'axie': 'AXS',
+        'smooth': 'SLP',
+        'chromia': 'CHR',
+        'alien': 'TLM',
+        'liquity': 'LUSD',
+        'olympus': 'OHM',
+        'convex': 'CVX',
+        'alchemix': 'ALCX'
+      };
+      
+      token = tokenMapping[matchedToken] || matchedToken.toUpperCase();
     } else if (tokenIdMatch) {
       token = tokenIdMatch[1];
     }
@@ -282,22 +323,63 @@ export class ChatAgent {
       chartType = chartTypeMatch[1];
     }
 
-    // Check for token-specific graph generation requests
+    // Check for news and market trends requests first (higher priority)
+    const newsPatterns = [
+      "news",
+      "market trends",
+      "market trend",
+      "sentiment",
+      "headlines",
+      "what's happening",
+      "latest news",
+      "news about",
+      "market analysis",
+      "market update"
+    ];
+    
+    const isNewsRequest = newsPatterns.some((pattern) =>
+      lowerMessage.includes(pattern)
+    );
+    
+    if (isNewsRequest) {
+      // For news requests, default to contextUserId if no specific target is set
+      const newsTargetUserId = targetUserId || contextUserId;
+      return {
+        type: "scan_user" as const,
+        userId: newsTargetUserId,
+        token: "all" as const,
+        isSelfScan: targetUserId ? isSelfScan : true,
+        needsGraph: false,
+        needsFullAnalysis: true,
+        needsSummaryOnly: false,
+      };
+    }
+
+    // Check for token-specific graph generation requests (more specific patterns)
     const tokenGraphPatterns = [
       "price history",
       "price chart",
       "token chart",
-      "show me",
+      "show me chart",
+      "show me graph",
+      "show me a chart",
+      "show me a graph",
+      "show me price",
       "chart for",
       "graph for",
+      "graph of",
+      "chart of",
       "price of",
       "history of",
-      "performance of"
+      "performance chart",
+      "performance graph"
     ];
     
-    const isTokenGraphRequest = tokenGraphPatterns.some((pattern) =>
+    const hasTokenGraphPattern = tokenGraphPatterns.some((pattern) =>
       lowerMessage.includes(pattern)
-    ) && (tokenSymbolMatch || tokenIdMatch || lowerMessage.includes("token"));
+    );
+    const hasTokenCondition = tokenSymbolMatch || tokenIdMatch || lowerMessage.includes("token");
+    const isTokenGraphRequest = hasTokenGraphPattern && hasTokenCondition;
 
     if (isTokenGraphRequest) {
       return {
@@ -351,6 +433,7 @@ export class ChatAgent {
       hederaAccountMatch || // If we found a Hedera account ID, assume it's a scan request
       isSelfReference // If self-referential language detected
     ) {
+
       return {
         type: "scan_user" as const,
         userId: targetUserId,
@@ -637,13 +720,129 @@ export class ChatAgent {
     });
 
     const intent = this.parseUserIntent(message, userId);
+    console.log(`🎯 Intent parsed for "${message}":`, intent);
 
     if (intent.type === "scan_user") {
       const targetUserId = intent.userId || userId;
       const token = intent.token || "HBAR";
       const isSelfScan = intent.isSelfScan || targetUserId === userId;
 
-      // Step 1: Scanner Agent with context-aware messaging
+      // Check if this is a news request (token === "all")
+      const isNewsRequest = token === "all";
+
+      if (isNewsRequest) {
+        // Handle news requests with dynamic token extraction
+        sendStep("news_start", {
+          message: "📰 Extracting search terms and fetching market trends...",
+          agent: "news@portfolio.guard",
+        });
+
+        try {
+          // Extract search terms from user message
+          const searchTerms = await this.extractNewsSearchTerms(message, userId);
+          console.log(`🔍 Extracted search terms for news: ${searchTerms.join(", ")}`);
+
+          // Import and use the news agent directly
+          const { analyzeFlexibleQuery } = await import("./newsAgent.js");
+          const newsAnalysis = await analyzeFlexibleQuery(searchTerms);
+
+          const marketData = {
+            sentiment: newsAnalysis.overallSentiment,
+            trends: newsAnalysis.combinedNews,
+            searchTerms: searchTerms,
+            tokenAnalysis: newsAnalysis.tokenAnalysis,
+            xSentiment: newsAnalysis.overallSentiment,
+            xTweets: newsAnalysis.tokenAnalysis.flatMap(analysis => analysis.x.tweets).slice(0, 5),
+            xPostsAnalyzed: newsAnalysis.tokenAnalysis.flatMap(analysis => analysis.x.tweets).length,
+          };
+
+          sendStep("news_complete", {
+            message: "✅ Market analysis complete",
+            data: marketData,
+            agent: "news@portfolio.guard",
+          });
+
+          // Step 3: LLM Analysis for news
+          sendStep("llm_start", {
+            message: "🤖 Generating AI analysis...",
+            agent: "llm@portfolio.guard",
+          });
+
+          // Create a news-focused analysis payload
+          const newsAnalysisPayload = {
+            address: targetUserId,
+            analysis: {
+              address: targetUserId,
+              marketData: marketData,
+              riskScore: 50, // Neutral for news-only requests
+              warnings: [],
+              recommendations: [`Based on current market sentiment for ${searchTerms.join(", ")}: ${newsAnalysis.overallSentiment}`],
+            },
+            success: true,
+          };
+
+          // Continue with LLM analysis...
+          const llmQuery = `Analyze the following market news and trends data for ${searchTerms.join(", ")}:
+
+Market Data:
+- Overall Sentiment: ${marketData.sentiment}
+- Search Terms: ${searchTerms.join(", ")}
+- News Articles: ${marketData.trends.length} articles
+- X Posts Analyzed: ${marketData.xPostsAnalyzed}
+
+Recent News Headlines:
+${marketData.trends.slice(0, 5).map((article: any) => `- ${article.title}`).join('\n')}
+
+Please provide:
+1. A comprehensive market analysis
+2. Key insights from the news
+3. Potential market implications
+4. Risk assessment for these tokens/topics
+
+Keep the response informative and actionable.`;
+
+          bus.sendMessage({
+            type: "llm_query",
+            from: this.agentName,
+            to: "llm@portfolio.guard",
+            payload: { query: llmQuery, userId: targetUserId },
+          });
+
+          const llmResponses = await bus.waitForResponses(
+            this.agentName,
+            ["llm_response"],
+            30000
+          );
+          const llmResponse = llmResponses.find((r) => r.type === "llm_response");
+
+          if (!llmResponse || !llmResponse.payload.success) {
+            throw new Error("LLM analysis failed");
+          }
+
+          sendStep("llm_complete", {
+            message: "✅ AI analysis complete",
+            data: { response: llmResponse.payload.response },
+            agent: "llm@portfolio.guard",
+          });
+
+          sendStep("complete", {
+            message: "✅ News analysis complete",
+            timestamp: new Date().toISOString(),
+            analysis: newsAnalysisPayload.analysis,
+            llmResponse: llmResponse.payload.response,
+          });
+
+        } catch (error: any) {
+          console.error("News analysis error:", error);
+          sendStep("error", {
+            message: `❌ News analysis failed: ${error.message}`,
+            error: error.message,
+          });
+        }
+        return;
+      }
+
+      // Regular portfolio scan flow
       const scanMessage = isSelfScan
         ? `🔍 Scanning your portfolio (${targetUserId})...`
         : `🔍 Scanning ${targetUserId}'s portfolio...`;
@@ -1076,7 +1275,90 @@ export class ChatAgent {
         const targetUserId = intent.userId || userId;
         const isSelfScan = intent.isSelfScan || targetUserId === userId;
         
-        // Step 1: Scanner Agent with context-aware messaging
+        // Check if this is a news request (token === "all")
+        const isNewsRequest = intent.token === "all";
+        console.log(`🔍 Debug - Intent token: ${intent.token}, isNewsRequest: ${isNewsRequest}`);
+        
+        if (isNewsRequest) {
+          // Handle news request by extracting search terms from user message
+          console.log(`📰 Processing news request: "${message}"`);
+          
+          // Extract search terms from the user's message
+          const searchTerms = await this.extractNewsSearchTerms(message, userId);
+          console.log(`🔍 Extracted search terms: ${JSON.stringify(searchTerms)}`);
+          
+          // Step 1: News Analysis
+          sendStep("news_start", {
+            message: "📰 Fetching latest news and market trends...",
+            agent: "news@portfolio.guard",
+          });
+
+          // Import and use news agent directly
+          const { analyzeFlexibleQuery } = await import("./newsAgent.js");
+          const newsAnalysis = await analyzeFlexibleQuery(searchTerms);
+          
+          sendStep("news_complete", {
+            message: "✅ News analysis complete",
+            data: newsAnalysis,
+            agent: "news@portfolio.guard",
+          });
+
+          // Construct marketData from news analysis
+          const marketData = {
+            searchTerms: searchTerms,
+            newsAnalysis: newsAnalysis,
+            timestamp: new Date().toISOString()
+          };
+
+          // Step 2: LLM Analysis
+          sendStep("llm_start", {
+            message: "🤖 Generating comprehensive market report...",
+            agent: "llm@portfolio.guard",
+          });
+
+          // Send to LLM for final analysis
+          bus.sendMessage({
+            from: this.agentName,
+            to: "llm@portfolio.guard",
+            type: "llm_query",
+            payload: {
+              query: `Analyze this news and market data: ${JSON.stringify(marketData)}`,
+              userId: targetUserId,
+            },
+          });
+
+          const llmResponses = await bus.waitForResponses(
+            this.agentName,
+            ["llm_response"],
+            30000
+          );
+          const llmResponse = llmResponses.find((r) => r.type === "llm_response");
+
+          if (llmResponse) {
+            sendStep("llm_complete", {
+              message: "✅ Market analysis complete",
+              data: llmResponse.payload,
+              agent: "llm@portfolio.guard",
+            });
+          }
+
+          // Final Summary for news
+          const latency = Date.now() - startTime;
+          let summaryResponse = `📰 **MARKET NEWS & TRENDS**\n\n`;
+          summaryResponse += `🔍 **Search Terms**: ${searchTerms.join(", ")}\n`;
+          summaryResponse += `📈 **Market Sentiment**: ${newsAnalysis?.overallSentiment || "neutral"}\n`;
+          summaryResponse += `\n⏱️ Summary generated in ${latency}ms\n`;
+          summaryResponse += `\n💡 *For detailed analysis, ask for a "full analysis" or "complete scan"*`;
+
+          sendStep("complete", {
+            response: summaryResponse,
+            latency: latency,
+          });
+
+          return;
+        }
+        
+        // Original portfolio scanning logic
         const scanMessage = isSelfScan
           ? `📋 Getting summary of your portfolio (${targetUserId})...`
           : `📋 Getting summary of ${targetUserId}'s portfolio...`;
@@ -1399,6 +1681,7 @@ export class ChatAgent {
       }
 
       // Handle combined requests (summary + graph)
+      
       if (intent.needsGraph && (intent.type === "scan_user" || intent.type === "summary_only")) {
         sendStep("graph_start", { 
           message: "📊 Generating portfolio graph..." 
@@ -1460,6 +1743,69 @@ export class ChatAgent {
     if (hours > 0) return `${hours}h ago`;
     if (minutes > 0) return `${minutes}m ago`;
     return 'just now';
+  }
+
+  async extractNewsSearchTerms(message: string, userId: string): Promise<string[]> {
+    try {
+      console.log(`🔍 Extracting news search terms from: "${message}"`);
+      
+      // Create a specialized prompt for extracting search terms
+      const extractionPrompt = `
+        Analyze this user message and extract relevant cryptocurrency/token symbols, company names, or financial topics that would be useful for news searches.
+        
+        User message: "${message}"
+        
+        Return ONLY a comma-separated list of search terms (max 5 terms). Focus on:
+        - Cryptocurrency symbols (BTC, ETH, HBAR, etc.)
+        - Company names mentioned
+        - Financial topics or events
+        - Market-related keywords
+        
+        If no specific terms are found, return "HBAR" as default.
+        
+        Example responses:
+        - "BTC, Bitcoin, cryptocurrency"
+        - "HBAR, Hedera, DeFi"
+        - "Tesla, TSLA, electric vehicles"
+      `;
+
+      // Send extraction query to LLM
+      bus.sendMessage({
+        type: "llm_query",
+        from: this.agentName,
+        to: "llm@portfolio.guard",
+        payload: { query: extractionPrompt, userId },
+      });
+
+      // Wait for LLM response
+      const responses = await bus.waitForResponses(
+        this.agentName,
+        ["llm_response"],
+        10000
+      );
+      
+      const llmResponse = responses[0];
+      
+      if (llmResponse && llmResponse.payload.success) {
+        const response = llmResponse.payload.response.trim();
+        
+        // Parse the comma-separated response
+        const terms = response
+          .split(',')
+          .map((term: string) => term.trim().toUpperCase())
+          .filter((term: string) => term.length > 0 && term.length < 20) // Filter out invalid terms
+          .slice(0, 5); // Limit to 5 terms
+        
+        console.log(`🔍 Extracted search terms: ${terms.join(", ")}`);
+        return terms.length > 0 ? terms : ["HBAR"];
+      } else {
+        console.warn(`🔍 Failed to extract search terms, using default`);
+        return ["HBAR"];
+      }
+    } catch (error: any) {
+      console.error(`🔍 Error extracting search terms:`, error.message);
+      return ["HBAR"];
+    }
   }
 
   destroy(): void {
