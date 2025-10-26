@@ -211,7 +211,7 @@ export function ChatInterface() {
       </div>
 
       {/* Header - Fixed positioning */}
-      <div className="relative z-20 border-b border-gray-600/30 backdrop-blur-sm top-0">
+      <div className="fixed top-0 left-0 right-0 z-20 border-b border-gray-600/30 backdrop-blur-sm">
         <div className="px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           {/* Left: Logo */}
           <Link href="/">
@@ -264,11 +264,11 @@ export function ChatInterface() {
       </div>
 
       {/* Main Layout Container */}
-      <div className="relative z-10 flex flex-1 overflow-hidden">
+      <div className="fixed top-16 left-0 right-0 bottom-0 z-10 flex overflow-hidden">
         {/* Sidebar */}
         <div
           className={cn(
-            "absolute left-0 top-0 h-full bg-black/60 backdrop-blur-sm border-r border-gray-600/30 flex flex-col transition-all duration-300 overflow-hidden",
+            "flex-shrink-0 bg-black/60 backdrop-blur-sm border-r border-gray-600/30 flex flex-col transition-all duration-300 overflow-hidden",
             sidebarOpen ? "w-64" : "w-0"
           )}
         >
@@ -385,12 +385,7 @@ export function ChatInterface() {
         </div>
 
         {/* Main Content Area */}
-        <div
-          className={cn(
-            "relative flex flex-col flex-1 transition-all duration-300",
-            sidebarOpen ? "ml-64" : "ml-0"
-          )}
-        >
+        <div className="relative flex flex-col flex-1 overflow-hidden">
           {/* Messages Container */}
           <div className="flex-1 overflow-y-auto">
             <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 space-y-6">

@@ -236,44 +236,77 @@ export function useChatWithStorage(): UseChatWithStorageReturn {
         // Get existing messages to check for duplicates
         const existingMessages = getChatMessages(currentConversation.id);
         
-        // Combine all assistant message content into one message
-        const combinedContent = assistantMessages
+        // Separate messages with graphs from those without
+        const messagesWithGraphs = assistantMessages.filter(msg => msg.graphs && msg.graphs.length > 0);
+        const messagesWithoutGraphs = assistantMessages.filter(msg => !msg.graphs || msg.graphs.length === 0);
+        
+        // Combine text-only messages
+        const combinedTextContent = messagesWithoutGraphs
           .map(msg => msg.content)
           .join('\n\n');
         
-        // Check if this combined message is already in local storage
-        const messageExists = existingMessages.some(msg => 
-          msg.content === combinedContent && 
-          msg.role === 'assistant'
+        // Check if this combined text message is already in local storage
+        const textMessageExists = existingMessages.some(msg => 
+          msg.content === combinedTextContent && 
+          msg.role === 'assistant' &&
+          (!msg.metadata?.graphs || msg.metadata.graphs.length === 0)
         );
         
-        if (!messageExists && combinedContent.trim()) {
-          // Get graphs from the last message that has them
-          const messageWithGraphs = assistantMessages
-            .slice()
-            .reverse()
-            .find(msg => msg.graphs && msg.graphs.length > 0);
-          
-          // Add combined assistant message to local storage
-          const assistantMessage = addMessageToChat(
+        // Add combined text message if it doesn't exist and has content
+        if (!textMessageExists && combinedTextContent.trim()) {
+          addMessageToChat(
             currentConversation.id,
             address,
             'assistant',
-            combinedContent,
+            combinedTextContent,
             {
-              graphs: messageWithGraphs?.graphs || [],
+              graphs: [], // Explicitly no graphs for text-only messages
             }
           );
+        }
+        
+        // Handle each message with graphs separately to prevent mixing
+        messagesWithGraphs.forEach(graphMessage => {
+          // Check if this specific graph message already exists
+          const graphMessageExists = existingMessages.some(msg => 
+            msg.content === graphMessage.content && 
+            msg.role === 'assistant' &&
+            msg.metadata?.graphs && 
+            msg.metadata.graphs.length > 0 &&
+            JSON.stringify(msg.metadata.graphs) === JSON.stringify(graphMessage.graphs)
+          );
           
+          if (!graphMessageExists) {
+            addMessageToChat(
+              currentConversation.id,
+              address,
+              'assistant',
+              graphMessage.content,
+              {
+                graphs: graphMessage.graphs || [],
+              }
+            );
+          }
+        });
+        
+        // Update conversation metadata only once
+        const totalNewMessages = (combinedTextContent.trim() ? 1 : 0) + 
+          messagesWithGraphs.filter(msg => !existingMessages.some(existing => 
+            existing.content === msg.content && 
+            existing.role === 'assistant' &&
+            JSON.stringify(existing.metadata?.graphs) === JSON.stringify(msg.graphs)
+          )).length;
+        
+        if (totalNewMessages > 0) {
           // Update conversation in local state
           setConversations(prev => 
             prev.map(chat => 
               chat.id === currentConversation.id 
                 ? { 
                     ...chat, 
-                    messageCount: chat.messageCount + 1,
-                    lastMessage: combinedContent.substring(0, 100) + 
-                      (combinedContent.length > 100 ? '...' : ''),
+                    messageCount: chat.messageCount + totalNewMessages,
+                    lastMessage: (combinedTextContent || messagesWithGraphs[messagesWithGraphs.length - 1]?.content || '').substring(0, 100) + 
+                      ((combinedTextContent || messagesWithGraphs[messagesWithGraphs.length - 1]?.content || '').length > 100 ? '...' : ''),
                     updatedAt: Date.now()
                   }
                 : chat
@@ -324,12 +357,13 @@ export function useChatWithStorage(): UseChatWithStorageReturn {
     }
     
     if (isStreaming && streamMessages.length > 0) {
-      // During streaming, combine local messages with live stream messages
-      // Remove any duplicate messages and show the live stream
+      // During streaming, show local messages plus live stream messages
+      // Use more precise duplicate detection based on content and exact timestamp
       const localMessagesWithoutDuplicates = messages.filter(localMsg => 
         !streamMessages.some(streamMsg => 
           streamMsg.role === localMsg.role && 
-          Math.abs(streamMsg.timestamp.getTime() - localMsg.timestamp) < 5000
+          streamMsg.content === localMsg.content &&
+          Math.abs(streamMsg.timestamp.getTime() - localMsg.timestamp) < 1000 // Reduced to 1 second for more precision
         )
       );
       return [...localMessagesWithoutDuplicates, ...convertedStreamMessages];
