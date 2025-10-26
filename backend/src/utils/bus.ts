@@ -100,34 +100,47 @@ export class A2ABus extends EventEmitter {
     this.emit("a2a_message", fullMessage);
   }
 
-  waitForResponses(
+  async waitForResponses(
     agentName: string,
     expectedTypes: string[],
-    timeoutMs: number = 3000
+    timeoutMs: number = 30000
   ): Promise<A2AMessage[]> {
+    console.log(`🔄 waitForResponses: Starting wait for ${expectedTypes.join(', ')} on ${agentName} with ${timeoutMs}ms timeout`);
+    
     return new Promise((resolve, reject) => {
       const responses: A2AMessage[] = [];
-      const expectedCount = expectedTypes.length;
-
-      const timeout = setTimeout(() => {
-        reject(
-          new Error(
-            `Timeout waiting for responses: ${expectedTypes.join(", ")}`
-          )
-        );
-      }, timeoutMs);
-
+      const receivedTypes = new Set<string>();
+      
       const messageHandler = (message: A2AMessage) => {
-        if (message.to === agentName && expectedTypes.includes(message.type)) {
+        console.log(`📨 waitForResponses: Received message type ${message.type} from ${message.from} to ${message.to}`);
+        console.log(`📨 waitForResponses: Message payload:`, JSON.stringify(message.payload, null, 2));
+        
+        if (expectedTypes.includes(message.type)) {
+          console.log(`✅ waitForResponses: Message type ${message.type} matches expected types`);
           responses.push(message);
-          if (responses.length >= expectedCount) {
-            clearTimeout(timeout);
+          receivedTypes.add(message.type);
+          
+          // Check if we've received all expected types
+          if (expectedTypes.every(type => receivedTypes.has(type))) {
+            console.log(`🎯 waitForResponses: All expected types received, resolving`);
             this.off(`message:${agentName}`, messageHandler);
+            clearTimeout(timeoutHandle);
             resolve(responses);
           }
+        } else {
+          console.log(`❌ waitForResponses: Message type ${message.type} not in expected types [${expectedTypes.join(', ')}]`);
         }
       };
 
+      const timeoutHandle = setTimeout(() => {
+        console.log(`⏰ waitForResponses: Timeout after ${timeoutMs}ms waiting for ${expectedTypes.join(', ')}`);
+        console.log(`📊 waitForResponses: Received types so far: [${Array.from(receivedTypes).join(', ')}]`);
+        console.log(`📊 waitForResponses: Total responses received: ${responses.length}`);
+        this.off(`message:${agentName}`, messageHandler);
+        reject(new Error(`Timeout waiting for responses: ${expectedTypes.join(', ')}`));
+      }, timeoutMs);
+
+      console.log(`👂 waitForResponses: Setting up listener on message:${agentName}`);
       this.on(`message:${agentName}`, messageHandler);
     });
   }

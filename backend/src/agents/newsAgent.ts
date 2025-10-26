@@ -11,6 +11,7 @@ import {
   A2AMessage,
   ScanRequestPayload,
 } from "../utils/bus.js";
+import { chatAgent } from "./chatAgent.js";
 
 export interface AnalyzeTokenResult {
   token: string;
@@ -25,6 +26,96 @@ export async function analyzeToken(token: string): Promise<AnalyzeTokenResult> {
     fetchXSentiment(query),
   ]);
   return { token: query, news, x };
+}
+
+export async function analyzeMultipleTokens(tokens: string[]): Promise<AnalyzeTokenResult[]> {
+  console.log(`📰 Analyzing multiple tokens: ${tokens.join(", ")}`);
+  
+  // Analyze each token in parallel
+  const results = await Promise.all(
+    tokens.map(token => analyzeToken(token))
+  );
+  
+  return results;
+}
+
+export async function analyzeFlexibleQueryFromPrompt(
+  userPrompt: string, 
+  userId: string
+): Promise<{
+  combinedNews: Article[];
+  tokenAnalysis: AnalyzeTokenResult[];
+  overallSentiment: string;
+  searchTerms: string[];
+}> {
+  console.log(`🤖 Analyzing news based on user prompt: "${userPrompt}"`);
+  
+  // Use LLM to extract relevant search terms from the user prompt
+  const searchTerms = await chatAgent.extractNewsSearchTerms(userPrompt, userId);
+  
+  // Perform flexible analysis with the extracted terms
+  const analysis = await analyzeFlexibleQuery(searchTerms);
+  
+  return {
+    ...analysis,
+    searchTerms
+  };
+}
+
+export async function analyzeFlexibleQuery(searchTerms: string[]): Promise<{
+  combinedNews: Article[];
+  tokenAnalysis: AnalyzeTokenResult[];
+  overallSentiment: string;
+}> {
+  console.log(`🔍 Flexible news analysis for terms: ${searchTerms.join(", ")}`);
+  
+  // Analyze each search term
+  const tokenAnalysis = await analyzeMultipleTokens(searchTerms);
+  
+  // Combine all news articles
+  const combinedNews: Article[] = [];
+  let totalSentimentScore = 0;
+  let validSentiments = 0;
+  
+  tokenAnalysis.forEach(result => {
+    combinedNews.push(...result.news);
+    
+    // Calculate overall sentiment
+    if (result.x.sentiment && result.x.sentiment !== 'NEUTRAL') {
+      if (result.x.sentiment === 'POSITIVE') {
+        totalSentimentScore += 1;
+      } else if (result.x.sentiment === 'NEGATIVE') {
+        totalSentimentScore -= 1;
+      }
+      validSentiments++;
+    }
+  });
+  
+  // Determine overall sentiment
+  let overallSentiment = 'neutral';
+  if (validSentiments > 0) {
+    const avgSentiment = totalSentimentScore / validSentiments;
+    if (avgSentiment > 0.2) {
+      overallSentiment = 'positive';
+    } else if (avgSentiment < -0.2) {
+      overallSentiment = 'negative';
+    }
+  }
+  
+  // Remove duplicates and sort by date
+  const uniqueNews = combinedNews.filter((article, index, self) => 
+    index === self.findIndex(a => a.url === article.url)
+  ).sort((a, b) => {
+    const dateA = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+    const dateB = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+    return dateB - dateA;
+  });
+  
+  return {
+    combinedNews: uniqueNews.slice(0, 20), // Limit to top 20 articles
+    tokenAnalysis,
+    overallSentiment
+  };
 }
 
 export async function sendXNewsAlert(

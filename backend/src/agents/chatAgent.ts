@@ -164,12 +164,15 @@ export class ChatAgent {
     message: string,
     contextUserId: string
   ): {
-    type: "scan_user" | "generate_graph" | "generate_token_chart" | "unknown";
+    type: "scan_user" | "generate_graph" | "generate_token_chart" | "summary_only" | "unknown";
     userId?: string;
     token?: string;
     chartType?: string;
     timeframe?: string;
     isSelfScan?: boolean;
+    needsGraph?: boolean;
+    needsFullAnalysis?: boolean;
+    needsSummaryOnly?: boolean;
   } {
     const lowerMessage = message.toLowerCase();
 
@@ -177,8 +180,8 @@ export class ChatAgent {
     const hederaAccountMatch = lowerMessage.match(/(\d+\.\d+\.\d+)/);
     const userMatch = lowerMessage.match(/user(\w+)/);
 
-    // Extract token symbols and token IDs
-    const tokenSymbolMatch = lowerMessage.match(/\b(hbar|usdc|usdt|btc|eth|matic|ada|dot|link|uni|aave|comp|mkr|snx|yfi|1inch|crv|bal|sushi|alpha|cream|badger|rook|farm|pickle|cover|armor|bond|digg|bnt|knc|lrc|zrx|ren|storj|grt|uma|band|ocean|fet|agi|nmr|rlc|ant|mana|enj|sand|axs|slp|chr|alice|tlm|audio|rari|tribe|fei|rai|lusd|frax|ohm|klima|time|memo|spell|ice|mim|cvx|fxs|alcx)\b/);
+    // Extract token symbols and token IDs (ordered by length to prioritize longer matches)
+    const tokenSymbolMatch = lowerMessage.match(/\b(ethereum|bitcoin|hedera|polygon|cardano|polkadot|chainlink|uniswap|compound|synthetix|balancer|sushiswap|decentraland|numeraire|republic|loopring|alchemix|olympus|liquity|sandbox|chromia|aragon|bancor|iexec|enjin|smooth|alien|convex|maker|yearn|curve|hbar|usdc|usdt|btc|eth|matic|ada|dot|link|uni|aave|comp|mkr|snx|yfi|1inch|crv|bal|sushi|alpha|cream|badger|rook|farm|pickle|cover|armor|bond|digg|bnt|knc|kyber|lrc|zrx|ren|storj|grt|uma|band|ocean|fet|agi|nmr|rlc|ant|mana|enj|sand|axs|axie|slp|chr|alice|tlm|audio|rari|tribe|fei|rai|lusd|frax|ohm|klima|time|memo|spell|ice|mim|cvx|fxs|alcx)\b/);
     const tokenIdMatch = lowerMessage.match(/token\s+(\d+\.\d+\.\d+)/);
     
     // Extract timeframe
@@ -187,6 +190,29 @@ export class ChatAgent {
     
     // Extract chart type
     const chartTypeMatch = lowerMessage.match(/\b(price|volume|market cap|correlation|performance|history)\b/);
+
+    // Check for graph-related keywords
+    const graphKeywords = [
+      "graph", "chart", "visualization", "visual", "plot", "diagram", 
+      "graph representation", "chart representation", "visual representation"
+    ];
+    const needsGraph = graphKeywords.some(keyword => lowerMessage.includes(keyword));
+    
+
+
+    // Check for summary-only keywords
+    const summaryKeywords = [
+      "summary", "summarize", "overview", "brief", "quick look", "tell me about",
+      "what's in", "what does", "describe", "explain", "breakdown"
+    ];
+    const needsSummaryOnly = summaryKeywords.some(keyword => lowerMessage.includes(keyword));
+
+    // Check for full analysis keywords
+    const fullAnalysisKeywords = [
+      "full analysis", "complete analysis", "detailed analysis", "deep dive",
+      "comprehensive", "thorough", "in-depth", "analyze everything"
+    ];
+    const needsFullAnalysis = fullAnalysisKeywords.some(keyword => lowerMessage.includes(keyword));
 
     // Check for self-referential patterns
     const selfPatterns = [
@@ -235,7 +261,46 @@ export class ChatAgent {
     // Determine token for analysis
     let token = "HBAR"; // Default token
     if (tokenSymbolMatch) {
-      token = tokenSymbolMatch[1].toUpperCase();
+      const matchedToken = tokenSymbolMatch[1].toLowerCase();
+      // Map full token names to symbols
+      const tokenMapping: { [key: string]: string } = {
+        'bitcoin': 'BTC',
+        'ethereum': 'ETH',
+        'hedera': 'HBAR',
+        'polygon': 'MATIC',
+        'cardano': 'ADA',
+        'polkadot': 'DOT',
+        'chainlink': 'LINK',
+        'uniswap': 'UNI',
+        'compound': 'COMP',
+        'maker': 'MKR',
+        'synthetix': 'SNX',
+        'yearn': 'YFI',
+        'curve': 'CRV',
+        'balancer': 'BAL',
+        'sushiswap': 'SUSHI',
+        'bancor': 'BNT',
+        'kyber': 'KNC',
+        'loopring': 'LRC',
+        'republic': 'REN',
+        'graph': 'GRT',
+        'numeraire': 'NMR',
+        'iexec': 'RLC',
+        'aragon': 'ANT',
+        'decentraland': 'MANA',
+        'enjin': 'ENJ',
+        'sandbox': 'SAND',
+        'axie': 'AXS',
+        'smooth': 'SLP',
+        'chromia': 'CHR',
+        'alien': 'TLM',
+        'liquity': 'LUSD',
+        'olympus': 'OHM',
+        'convex': 'CVX',
+        'alchemix': 'ALCX'
+      };
+      
+      token = tokenMapping[matchedToken] || matchedToken.toUpperCase();
     } else if (tokenIdMatch) {
       token = tokenIdMatch[1];
     }
@@ -258,22 +323,63 @@ export class ChatAgent {
       chartType = chartTypeMatch[1];
     }
 
-    // Check for token-specific graph generation requests
+    // Check for news and market trends requests first (higher priority)
+    const newsPatterns = [
+      "news",
+      "market trends",
+      "market trend",
+      "sentiment",
+      "headlines",
+      "what's happening",
+      "latest news",
+      "news about",
+      "market analysis",
+      "market update"
+    ];
+    
+    const isNewsRequest = newsPatterns.some((pattern) =>
+      lowerMessage.includes(pattern)
+    );
+    
+    if (isNewsRequest) {
+      // For news requests, default to contextUserId if no specific target is set
+      const newsTargetUserId = targetUserId || contextUserId;
+      return {
+        type: "scan_user" as const,
+        userId: newsTargetUserId,
+        token: "all" as const,
+        isSelfScan: targetUserId ? isSelfScan : true,
+        needsGraph: false,
+        needsFullAnalysis: true,
+        needsSummaryOnly: false,
+      };
+    }
+
+    // Check for token-specific graph generation requests (more specific patterns)
     const tokenGraphPatterns = [
       "price history",
       "price chart",
       "token chart",
-      "show me",
+      "show me chart",
+      "show me graph",
+      "show me a chart",
+      "show me a graph",
+      "show me price",
       "chart for",
       "graph for",
+      "graph of",
+      "chart of",
       "price of",
       "history of",
-      "performance of"
+      "performance chart",
+      "performance graph"
     ];
     
-    const isTokenGraphRequest = tokenGraphPatterns.some((pattern) =>
+    const hasTokenGraphPattern = tokenGraphPatterns.some((pattern) =>
       lowerMessage.includes(pattern)
-    ) && (tokenSymbolMatch || tokenIdMatch || lowerMessage.includes("token"));
+    );
+    const hasTokenCondition = tokenSymbolMatch || tokenIdMatch || lowerMessage.includes("token");
+    const isTokenGraphRequest = hasTokenGraphPattern && hasTokenCondition;
 
     if (isTokenGraphRequest) {
       return {
@@ -283,6 +389,9 @@ export class ChatAgent {
         chartType,
         timeframe,
         isSelfScan,
+        needsGraph: true,
+        needsFullAnalysis: false,
+        needsSummaryOnly: false,
       };
     }
 
@@ -295,10 +404,27 @@ export class ChatAgent {
         type: "generate_graph" as const,
         userId: targetUserId,
         isSelfScan,
+        needsGraph: true,
+        needsFullAnalysis: false,
+        needsSummaryOnly: false,
       };
     }
+
+    // Check for summary-only requests (new intent type)
+    if (needsSummaryOnly && (targetUserId || isSelfReference)) {
+      return {
+        type: "summary_only" as const,
+        userId: targetUserId,
+        token: "all" as const,
+        isSelfScan,
+        needsGraph: false,
+        needsFullAnalysis: false,
+        needsSummaryOnly: true,
+      };
+    }
+
     // Check for scan/analysis requests
-    else if (
+    if (
       lowerMessage.includes("scan") ||
       lowerMessage.includes("analyze") ||
       (lowerMessage.includes("check") &&
@@ -307,15 +433,24 @@ export class ChatAgent {
       hederaAccountMatch || // If we found a Hedera account ID, assume it's a scan request
       isSelfReference // If self-referential language detected
     ) {
+
       return {
         type: "scan_user" as const,
         userId: targetUserId,
         token: "all" as const,
         isSelfScan,
+        needsGraph,
+        needsFullAnalysis,
+        needsSummaryOnly: false,
       };
     }
 
-    return { type: "unknown" as const };
+    return { 
+      type: "unknown" as const, 
+      needsGraph,
+      needsFullAnalysis: false,
+      needsSummaryOnly: false,
+    };
   }
 
   private async handleScanUser(
@@ -386,6 +521,16 @@ export class ChatAgent {
     latency: number;
   }> {
     try {
+      console.log(`🔍 Requesting graph generation for user: ${userId}`);
+      
+      // Set up response listener BEFORE sending the message to avoid race condition
+      console.log(`⏳ Setting up listener for graph_ready response...`);
+      const responsePromise = bus.waitForResponses(
+        this.agentName,
+        ["graph_ready"],
+        15000
+      );
+      
       // Request graph generation
       bus.sendMessage({
         type: "generate_graph",
@@ -394,17 +539,18 @@ export class ChatAgent {
         payload: { userId, timeframe: "24h" },
       });
 
+      console.log(`⏳ Waiting for graph_ready response...`);
+      
       // Wait for graph response
-      const responses = await bus.waitForResponses(
-        this.agentName,
-        ["graph_ready"],
-        5000
-      );
+      const responses = await responsePromise;
 
+      console.log(`📊 Received ${responses.length} responses:`, responses.map(r => r.type));
+      
       const graphResponse = responses.find((r) => r.type === "graph_ready");
 
       if (graphResponse) {
         const payload = graphResponse.payload as GraphReadyPayload;
+        console.log(`✅ Graph response payload:`, JSON.stringify(payload, null, 2));
 
         return {
           response: `📊 Generated portfolio graph for ${userId}`,
@@ -440,6 +586,13 @@ export class ChatAgent {
     latency: number;
   }> {
     try {
+      // Set up response listener BEFORE sending the message to avoid race condition
+      const responsePromise = bus.waitForResponses(
+        this.agentName,
+        ["token_chart_ready"],
+        30000
+      );
+      
       // Request token chart generation
       bus.sendMessage({
         type: "generate_token_chart",
@@ -454,11 +607,7 @@ export class ChatAgent {
       });
 
       // Wait for token chart response
-      const graphResponses = await bus.waitForResponses(
-        this.agentName,
-        ["token_chart_ready"],
-        30000
-      );
+      const graphResponses = await responsePromise;
       const graphResponse = graphResponses.find(
         (r) => r.type === "token_chart_ready"
       );
@@ -571,13 +720,129 @@ export class ChatAgent {
     });
 
     const intent = this.parseUserIntent(message, userId);
+    console.log(`🎯 Intent parsed for "${message}":`, intent);
 
     if (intent.type === "scan_user") {
       const targetUserId = intent.userId || userId;
       const token = intent.token || "HBAR";
       const isSelfScan = intent.isSelfScan || targetUserId === userId;
 
-      // Step 1: Scanner Agent with context-aware messaging
+      // Check if this is a news request (token === "all")
+      const isNewsRequest = token === "all";
+
+      if (isNewsRequest) {
+        // Handle news requests with dynamic token extraction
+        sendStep("news_start", {
+          message: "📰 Extracting search terms and fetching market trends...",
+          agent: "news@portfolio.guard",
+        });
+
+        try {
+          // Extract search terms from user message
+          const searchTerms = await this.extractNewsSearchTerms(message, userId);
+          console.log(`🔍 Extracted search terms for news: ${searchTerms.join(", ")}`);
+
+          // Import and use the news agent directly
+          const { analyzeFlexibleQuery } = await import("./newsAgent.js");
+          const newsAnalysis = await analyzeFlexibleQuery(searchTerms);
+
+          const marketData = {
+            sentiment: newsAnalysis.overallSentiment,
+            trends: newsAnalysis.combinedNews,
+            searchTerms: searchTerms,
+            tokenAnalysis: newsAnalysis.tokenAnalysis,
+            xSentiment: newsAnalysis.overallSentiment,
+            xTweets: newsAnalysis.tokenAnalysis.flatMap(analysis => analysis.x.tweets).slice(0, 5),
+            xPostsAnalyzed: newsAnalysis.tokenAnalysis.flatMap(analysis => analysis.x.tweets).length,
+          };
+
+          sendStep("news_complete", {
+            message: "✅ Market analysis complete",
+            data: marketData,
+            agent: "news@portfolio.guard",
+          });
+
+          // Step 3: LLM Analysis for news
+          sendStep("llm_start", {
+            message: "🤖 Generating AI analysis...",
+            agent: "llm@portfolio.guard",
+          });
+
+          // Create a news-focused analysis payload
+          const newsAnalysisPayload = {
+            address: targetUserId,
+            analysis: {
+              address: targetUserId,
+              marketData: marketData,
+              riskScore: 50, // Neutral for news-only requests
+              warnings: [],
+              recommendations: [`Based on current market sentiment for ${searchTerms.join(", ")}: ${newsAnalysis.overallSentiment}`],
+            },
+            success: true,
+          };
+
+          // Continue with LLM analysis...
+          const llmQuery = `Analyze the following market news and trends data for ${searchTerms.join(", ")}:
+
+Market Data:
+- Overall Sentiment: ${marketData.sentiment}
+- Search Terms: ${searchTerms.join(", ")}
+- News Articles: ${marketData.trends.length} articles
+- X Posts Analyzed: ${marketData.xPostsAnalyzed}
+
+Recent News Headlines:
+${marketData.trends.slice(0, 5).map((article: any) => `- ${article.title}`).join('\n')}
+
+Please provide:
+1. A comprehensive market analysis
+2. Key insights from the news
+3. Potential market implications
+4. Risk assessment for these tokens/topics
+
+Keep the response informative and actionable.`;
+
+          bus.sendMessage({
+            type: "llm_query",
+            from: this.agentName,
+            to: "llm@portfolio.guard",
+            payload: { query: llmQuery, userId: targetUserId },
+          });
+
+          const llmResponses = await bus.waitForResponses(
+            this.agentName,
+            ["llm_response"],
+            30000
+          );
+          const llmResponse = llmResponses.find((r) => r.type === "llm_response");
+
+          if (!llmResponse || !llmResponse.payload.success) {
+            throw new Error("LLM analysis failed");
+          }
+
+          sendStep("llm_complete", {
+            message: "✅ AI analysis complete",
+            data: { response: llmResponse.payload.response },
+            agent: "llm@portfolio.guard",
+          });
+
+          sendStep("complete", {
+            message: "✅ News analysis complete",
+            timestamp: new Date().toISOString(),
+            analysis: newsAnalysisPayload.analysis,
+            llmResponse: llmResponse.payload.response,
+          });
+
+        } catch (error: any) {
+          console.error("News analysis error:", error);
+          sendStep("error", {
+            message: `❌ News analysis failed: ${error.message}`,
+            error: error.message,
+          });
+        }
+        return;
+      }
+
+      // Regular portfolio scan flow
       const scanMessage = isSelfScan
         ? `🔍 Scanning your portfolio (${targetUserId})...`
         : `🔍 Scanning ${targetUserId}'s portfolio...`;
@@ -716,6 +981,13 @@ export class ChatAgent {
       });
 
       try {
+        // Set up response listener BEFORE sending the message to avoid race condition
+        const responsePromise = bus.waitForResponses(
+          this.agentName,
+          ["token_chart_ready"],
+          30000
+        );
+        
         bus.sendMessage({
           from: this.agentName,
           to: "graph@portfolio.guard",
@@ -723,11 +995,7 @@ export class ChatAgent {
           payload: { userId },
         });
 
-        const graphResponses = await bus.waitForResponses(
-          this.agentName,
-          ["token_chart_ready"],
-          30000
-        );
+        const graphResponses = await responsePromise;
         const graphResponse = graphResponses.find(
           (r) => r.type === "token_chart_ready"
         );
@@ -774,6 +1042,13 @@ export class ChatAgent {
       });
 
       try {
+        // Set up response listener BEFORE sending the message to avoid race condition
+        const responsePromise = bus.waitForResponses(
+          this.agentName,
+          ["graph_ready"],
+          30000
+        );
+        
         bus.sendMessage({
           from: this.agentName,
           to: "graph@portfolio.guard",
@@ -786,11 +1061,7 @@ export class ChatAgent {
           },
         });
 
-        const graphResponses = await bus.waitForResponses(
-          this.agentName,
-          ["graph_ready"],
-          30000
-        );
+        const graphResponses = await responsePromise;
         const graphResponse = graphResponses.find(
           (r) => r.type === "graph_ready"
         );
@@ -973,6 +1244,7 @@ export class ChatAgent {
     contextHistory: Array<{ role: string; content: string; timestamp: number }> = [],
     sendStep: (step: string, data: any) => void
   ): Promise<void> {
+    const startTime = Date.now();
     console.log(`💬 Processing streaming command with context: "${message}" for user: ${userId}`);
     console.log(`📚 Context history: ${contextHistory.length} messages`);
 
@@ -1000,25 +1272,234 @@ export class ChatAgent {
       });
 
       if (intent.type === "scan_user") {
-        sendStep("action", { message: "Scanning user portfolio..." });
+        const targetUserId = intent.userId || userId;
+        const isSelfScan = intent.isSelfScan || targetUserId === userId;
         
-        // Execute scan
-        const scanResult = await this.handleScanUser(
-          intent.userId || userId,
-          intent.token || "all",
-          Date.now()
-        );
+        // Check if this is a news request (token === "all")
+        const isNewsRequest = intent.token === "all";
+        console.log(`🔍 Debug - Intent token: ${intent.token}, isNewsRequest: ${isNewsRequest}`);
         
-        sendStep("scan_complete", { 
-          message: "Portfolio scan completed",
-          graphs: scanResult.graphs 
+        if (isNewsRequest) {
+          // Handle news request by extracting search terms from user message
+          console.log(`📰 Processing news request: "${message}"`);
+          
+          // Extract search terms from the user's message
+          const searchTerms = await this.extractNewsSearchTerms(message, userId);
+          console.log(`🔍 Extracted search terms: ${JSON.stringify(searchTerms)}`);
+          
+          // Step 1: News Analysis
+          sendStep("news_start", {
+            message: "📰 Fetching latest news and market trends...",
+            agent: "news@portfolio.guard",
+          });
+
+          // Import and use news agent directly
+          const { analyzeFlexibleQuery } = await import("./newsAgent.js");
+          const newsAnalysis = await analyzeFlexibleQuery(searchTerms);
+          
+          sendStep("news_complete", {
+            message: "✅ News analysis complete",
+            data: newsAnalysis,
+            agent: "news@portfolio.guard",
+          });
+
+          // Construct marketData from news analysis
+          const marketData = {
+            searchTerms: searchTerms,
+            newsAnalysis: newsAnalysis,
+            timestamp: new Date().toISOString()
+          };
+
+          // Step 2: LLM Analysis
+          sendStep("llm_start", {
+            message: "🤖 Generating comprehensive market report...",
+            agent: "llm@portfolio.guard",
+          });
+
+          // Send to LLM for final analysis
+          bus.sendMessage({
+            from: this.agentName,
+            to: "llm@portfolio.guard",
+            type: "llm_query",
+            payload: {
+              query: `Analyze this news and market data: ${JSON.stringify(marketData)}`,
+              userId: targetUserId,
+            },
+          });
+
+          const llmResponses = await bus.waitForResponses(
+            this.agentName,
+            ["llm_response"],
+            30000
+          );
+          const llmResponse = llmResponses.find((r) => r.type === "llm_response");
+
+          if (llmResponse) {
+            sendStep("llm_complete", {
+              message: "✅ Market analysis complete",
+              data: llmResponse.payload,
+              agent: "llm@portfolio.guard",
+            });
+          }
+
+          // Final Summary for news
+          const latency = Date.now() - startTime;
+          let summaryResponse = `📰 **MARKET NEWS & TRENDS**\n\n`;
+          summaryResponse += `🔍 **Search Terms**: ${searchTerms.join(", ")}\n`;
+          summaryResponse += `📈 **Market Sentiment**: ${newsAnalysis?.overallSentiment || "neutral"}\n`;
+          summaryResponse += `\n⏱️ Summary generated in ${latency}ms\n`;
+          summaryResponse += `\n💡 *For detailed analysis, ask for a "full analysis" or "complete scan"*`;
+
+          sendStep("complete", {
+            response: summaryResponse,
+            latency: latency,
+          });
+
+          return;
+        }
+        
+        // Original portfolio scanning logic
+        const scanMessage = isSelfScan
+          ? `📋 Getting summary of your portfolio (${targetUserId})...`
+          : `📋 Getting summary of ${targetUserId}'s portfolio...`;
+
+        sendStep("scanner_start", {
+          message: scanMessage,
+          agent: "scanner@portfolio.guard",
+          isSelfScan,
+          targetAddress: targetUserId,
         });
-        
-        sendStep("complete", { 
-          response: scanResult.response,
-          graphs: scanResult.graphs,
-          latency: scanResult.latency
-        });
+
+        try {
+          // Send analyze address request to scanner
+          bus.sendMessage({
+            from: this.agentName,
+            to: "scanner@portfolio.guard",
+            type: "analyze_address",
+            payload: { address: targetUserId, userId: targetUserId },
+          });
+
+          // Wait for scanner response
+          const responses = await bus.waitForResponses(
+            this.agentName,
+            ["analysis_response"],
+            30000
+          );
+          const scannerResponse = responses.find(
+            (r) => r.type === "analysis_response"
+          );
+
+          if (!scannerResponse) {
+            throw new Error("No scanner response received");
+          }
+
+          const analysisPayload = scannerResponse.payload;
+          if (!analysisPayload.success) {
+            throw new Error(`Scanner analysis failed: ${analysisPayload.error}`);
+          }
+
+          sendStep("scanner_complete", {
+            message: "✅ Portfolio scan complete",
+            data: analysisPayload.analysis,
+            agent: "scanner@portfolio.guard",
+          });
+
+          // Step 2: News/Market Data
+          sendStep("news_start", {
+            message: "📰 Fetching market trends and news...",
+            agent: "news@portfolio.guard",
+          });
+
+          // The scanner already fetched market data, extract it
+          const marketData = scannerResponse.payload.marketData;
+
+          sendStep("news_complete", {
+            message: "✅ Market analysis complete",
+            data: marketData,
+            agent: "news@portfolio.guard",
+          });
+
+          // Step 3: LLM Analysis
+          sendStep("llm_start", {
+            message: "🤖 Generating AI analysis...",
+            agent: "llm@portfolio.guard",
+          });
+
+          // Send to LLM for final analysis
+          bus.sendMessage({
+            from: this.agentName,
+            to: "llm@portfolio.guard",
+            type: "llm_query",
+            payload: {
+              query: `Analyze this portfolio data: ${JSON.stringify(
+                scannerResponse.payload
+              )}`,
+              userId: targetUserId,
+            },
+          });
+
+          const llmResponses = await bus.waitForResponses(
+            this.agentName,
+            ["llm_response"],
+            30000
+          );
+          const llmResponse = llmResponses.find((r) => r.type === "llm_response");
+
+          if (llmResponse) {
+            sendStep("llm_complete", {
+              message: "✅ AI analysis complete",
+              data: llmResponse.payload,
+              agent: "llm@portfolio.guard",
+            });
+          }
+
+          // Final Summary
+          const latency = Date.now() - startTime;
+          const analysis = analysisPayload.analysis;
+
+          let summaryResponse = `🤖 🔍 PORTFOLIO ANALYSIS: ${targetUserId}\n\n`;
+
+          if (analysis.balance) {
+            summaryResponse += `💰 **Balance**: ${analysis.balance.hbars}\n`;
+            if (analysis.balance.tokens && analysis.balance.tokens.length > 0) {
+              summaryResponse += `🪙 **Tokens**: ${analysis.balance.tokens.length} different tokens\n`;
+              
+              // Show top 3 tokens by balance
+              const topTokens = analysis.balance.tokens
+                .slice(0, 3)
+                .map((token: any) => `• ${token.symbol || token.tokenId}: ${token.balance}`)
+                .join('\n');
+              summaryResponse += `\n**Top Holdings**:\n${topTokens}\n`;
+            }
+          }
+
+          if (analysis.riskScore !== undefined) {
+            summaryResponse += `\n⚠️ **Risk Score**: ${analysis.riskScore}/10\n`;
+          }
+
+          if (analysis.marketData) {
+            summaryResponse += `📈 **Market Sentiment**: ${analysis.marketData.sentiment}\n`;
+          }
+
+          summaryResponse += `\n⏱️ Summary generated in ${latency}ms`;
+          summaryResponse += `\n\n💡 *For detailed analysis, ask for a "full analysis" or "complete scan"*`;
+
+          sendStep("summary_complete", { 
+            message: "Portfolio summary completed"
+          });
+
+          sendStep("complete", { 
+            response: summaryResponse,
+            latency: latency
+          });
+
+        } catch (error: any) {
+          sendStep("error", {
+            message: "Summary generation failed",
+            error: error.message || String(error),
+            agent: "system",
+          });
+        }
         
       } else if (intent.type === "generate_graph") {
         sendStep("action", { message: "Generating portfolio graph..." });
@@ -1061,9 +1542,114 @@ export class ChatAgent {
           latency: tokenChartResult.latency
         });
         
+      } else if (intent.type === "summary_only") {
+        // Summary-only requests: Only use scanner, skip news and LLM for faster response
+        const targetUserId = intent.userId || userId;
+        const isSelfScan = intent.isSelfScan || targetUserId === userId;
+        
+        const scanMessage = isSelfScan
+          ? `📋 Getting summary of your portfolio (${targetUserId})...`
+          : `📋 Getting summary of ${targetUserId}'s portfolio...`;
+
+        sendStep("scanner_start", {
+          message: scanMessage,
+          agent: "scanner@portfolio.guard",
+          isSelfScan,
+          targetAddress: targetUserId,
+        });
+
+        try {
+          // Send analyze address request to scanner
+          bus.sendMessage({
+            from: this.agentName,
+            to: "scanner@portfolio.guard",
+            type: "analyze_address",
+            payload: { address: targetUserId, userId: targetUserId },
+          });
+
+          // Wait for scanner response
+          const responses = await bus.waitForResponses(
+            this.agentName,
+            ["analysis_response"],
+            30000
+          );
+          const scannerResponse = responses.find(
+            (r) => r.type === "analysis_response"
+          );
+
+          if (!scannerResponse) {
+            throw new Error("No scanner response received");
+          }
+
+          const analysisPayload = scannerResponse.payload;
+          if (!analysisPayload.success) {
+            throw new Error(`Scanner analysis failed: ${analysisPayload.error}`);
+          }
+
+          sendStep("scanner_complete", {
+            message: "✅ Portfolio summary ready",
+            data: analysisPayload.analysis,
+            agent: "scanner@portfolio.guard",
+          });
+
+          // Generate quick summary without LLM analysis
+          const latency = Date.now() - startTime;
+          const analysis = analysisPayload.analysis;
+
+          let summaryResponse = `📋 **PORTFOLIO SUMMARY**: ${targetUserId}\n\n`;
+
+          if (analysis.balance) {
+            summaryResponse += `💰 **Balance**: ${analysis.balance.hbars}\n`;
+            if (analysis.balance.tokens && analysis.balance.tokens.length > 0) {
+              summaryResponse += `🪙 **Tokens**: ${analysis.balance.tokens.length} different tokens\n`;
+              
+              // Show top 3 tokens by balance
+              const topTokens = analysis.balance.tokens
+                .slice(0, 3)
+                .map((token: any) => `• ${token.symbol || token.tokenId}: ${token.balance}`)
+                .join('\n');
+              summaryResponse += `\n**Top Holdings**:\n${topTokens}\n`;
+            }
+          }
+
+          if (analysis.riskScore !== undefined) {
+            summaryResponse += `\n⚠️ **Risk Score**: ${analysis.riskScore}/10\n`;
+          }
+
+          if (analysis.marketData) {
+            summaryResponse += `📈 **Market Sentiment**: ${analysis.marketData.sentiment}\n`;
+          }
+
+          summaryResponse += `\n⏱️ Summary generated in ${latency}ms`;
+          summaryResponse += `\n\n💡 *For detailed analysis, ask for a "full analysis" or "complete scan"*`;
+
+          sendStep("summary_complete", { 
+            message: "Portfolio summary completed"
+          });
+
+          sendStep("complete", { 
+            response: summaryResponse,
+            latency: latency
+          });
+
+        } catch (error: any) {
+          sendStep("error", {
+            message: "Summary generation failed",
+            error: error.message || String(error),
+            agent: "system",
+          });
+        }
+        
       } else {
         // For general queries, use LLM with context
         sendStep("llm_query", { message: "Consulting AI assistant..." });
+        
+        // Set up response listener BEFORE sending the message to avoid race condition
+        const responsePromise = bus.waitForResponses(
+          this.agentName,
+          ["llm_response"],
+          30000
+        );
         
         bus.sendMessage({
           type: "llm_query",
@@ -1078,11 +1664,7 @@ export class ChatAgent {
         });
 
         // Wait for LLM response
-        const responses = await bus.waitForResponses(
-          this.agentName,
-          ["llm_response"],
-          30000
-        );
+        const responses = await responsePromise;
         const llmResponse = responses[0];
 
         if (llmResponse && llmResponse.payload.success) {
@@ -1094,6 +1676,41 @@ export class ChatAgent {
         } else {
           sendStep("error", { 
             error: "Failed to get AI response" 
+          });
+        }
+      }
+
+      // Handle combined requests (summary + graph)
+      
+      if (intent.needsGraph && (intent.type === "scan_user" || intent.type === "summary_only")) {
+        sendStep("graph_start", { 
+          message: "📊 Generating portfolio graph..." 
+        });
+        
+        try {
+          const targetUserId = intent.userId || userId;
+          const graphResult = await this.handleGenerateGraph(
+            targetUserId,
+            Date.now()
+          );
+          
+          sendStep("graph_complete", { 
+            message: "✅ Graph generation completed",
+            graphs: graphResult.graphs 
+          });
+          
+          // Send updated complete event with graphs
+          sendStep("complete", { 
+            response: "📊 Portfolio analysis and graph generated successfully!",
+            graphs: graphResult.graphs,
+            latency: Date.now() - startTime
+          });
+          
+        } catch (error: any) {
+          sendStep("error", {
+            message: "Graph generation failed",
+            error: error.message || String(error),
+            agent: "graph@portfolio.guard",
           });
         }
       }
@@ -1126,6 +1743,69 @@ export class ChatAgent {
     if (hours > 0) return `${hours}h ago`;
     if (minutes > 0) return `${minutes}m ago`;
     return 'just now';
+  }
+
+  async extractNewsSearchTerms(message: string, userId: string): Promise<string[]> {
+    try {
+      console.log(`🔍 Extracting news search terms from: "${message}"`);
+      
+      // Create a specialized prompt for extracting search terms
+      const extractionPrompt = `
+        Analyze this user message and extract relevant cryptocurrency/token symbols, company names, or financial topics that would be useful for news searches.
+        
+        User message: "${message}"
+        
+        Return ONLY a comma-separated list of search terms (max 5 terms). Focus on:
+        - Cryptocurrency symbols (BTC, ETH, HBAR, etc.)
+        - Company names mentioned
+        - Financial topics or events
+        - Market-related keywords
+        
+        If no specific terms are found, return "HBAR" as default.
+        
+        Example responses:
+        - "BTC, Bitcoin, cryptocurrency"
+        - "HBAR, Hedera, DeFi"
+        - "Tesla, TSLA, electric vehicles"
+      `;
+
+      // Send extraction query to LLM
+      bus.sendMessage({
+        type: "llm_query",
+        from: this.agentName,
+        to: "llm@portfolio.guard",
+        payload: { query: extractionPrompt, userId },
+      });
+
+      // Wait for LLM response
+      const responses = await bus.waitForResponses(
+        this.agentName,
+        ["llm_response"],
+        10000
+      );
+      
+      const llmResponse = responses[0];
+      
+      if (llmResponse && llmResponse.payload.success) {
+        const response = llmResponse.payload.response.trim();
+        
+        // Parse the comma-separated response
+        const terms = response
+          .split(',')
+          .map((term: string) => term.trim().toUpperCase())
+          .filter((term: string) => term.length > 0 && term.length < 20) // Filter out invalid terms
+          .slice(0, 5); // Limit to 5 terms
+        
+        console.log(`🔍 Extracted search terms: ${terms.join(", ")}`);
+        return terms.length > 0 ? terms : ["HBAR"];
+      } else {
+        console.warn(`🔍 Failed to extract search terms, using default`);
+        return ["HBAR"];
+      }
+    } catch (error: any) {
+      console.error(`🔍 Error extracting search terms:`, error.message);
+      return ["HBAR"];
+    }
   }
 
   destroy(): void {

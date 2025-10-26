@@ -1,6 +1,7 @@
 import { A2AMessage, bus } from "../utils/bus.js";
 import axios from "axios";
 import { fetchNewsHeadlines, fetchXSentiment } from "../services/news.js";
+import { analyzeFlexibleQuery } from "./newsAgent.js";
 
 interface AnalysisResult {
   address: string;
@@ -128,7 +129,12 @@ export class ScannerAgent {
 
       // 2. Get market trends using X-trend endpoint
       console.log(`📈 Fetching market trends...`);
-      const trendsResponse = await this.getMarketTrends(analysisUserId);
+      
+      // Extract token symbols from holdings for dynamic news search
+      const searchTerms = this.extractSearchTermsFromHoldings(analysis.balance);
+      console.log(`🔍 Search terms extracted: ${searchTerms.join(", ")}`);
+      
+      const trendsResponse = await this.getMarketTrends(analysisUserId, searchTerms);
       if (trendsResponse) {
         analysis.marketData = trendsResponse;
       }
@@ -197,45 +203,45 @@ export class ScannerAgent {
     }
   }
 
-  private async getMarketTrends(userId: string): Promise<any> {
+  private async getMarketTrends(userId: string, searchTerms: string[] = ["HBAR"]): Promise<any> {
     try {
-      const token = "HBAR";
-      console.log(`📈 Fetching market trends for ${token}...`);
+      // Use the first search term as primary, or default to HBAR
+      const primaryToken = searchTerms.length > 0 ? searchTerms[0] : "HBAR";
+      console.log(`📈 Fetching market trends for ${primaryToken}... (search terms: ${searchTerms.join(", ")})`);
 
-      // Always fetch NewsAPI headlines
-      const newsHeadlines = await fetchNewsHeadlines(token);
-      console.log(`📰 Fetched ${newsHeadlines.length} news headlines`);
+      // Use flexible news analysis for multiple search terms
+      const flexibleAnalysis = await analyzeFlexibleQuery(searchTerms);
+      console.log(`📰 Flexible analysis completed for ${searchTerms.length} terms`);
+      console.log(`📰 Combined news articles: ${flexibleAnalysis.combinedNews.length}`);
+      console.log(`🐦 Overall sentiment: ${flexibleAnalysis.overallSentiment}`);
 
-      // Fetch X sentiment with configurable post count (respects ENABLE_X_DATA internally)
-      const xPostsCount = parseInt(process.env.X_POSTS_COUNT || "50", 10);
-      const xSentiment = await fetchXSentiment(token, xPostsCount);
-      console.log(
-        `🐦 X sentiment: ${xSentiment.sentiment}, Posts fetched: ${
-          xSentiment.tweets.length
-        }${xSentiment.error ? ` (${xSentiment.error})` : ""}`
-      );
+      // Use the overall sentiment from flexible analysis
+      const overallSentiment = flexibleAnalysis.overallSentiment.toLowerCase();
 
-      // Determine overall sentiment (prioritize X if available, fallback to neutral)
-      let overallSentiment = "neutral";
-      if (!xSentiment.error && xSentiment.sentiment !== "NEUTRAL") {
-        overallSentiment = xSentiment.sentiment.toLowerCase();
-      }
+      // Aggregate X data from all token analyses
+      const allXTweets = flexibleAnalysis.tokenAnalysis.flatMap(analysis => analysis.x.tweets);
+      const xErrors = flexibleAnalysis.tokenAnalysis
+        .map(analysis => analysis.x.error)
+        .filter(error => error);
 
       const marketData = {
         sentiment: overallSentiment,
-        trends: newsHeadlines,
-        xSentiment: xSentiment.sentiment,
-        xError: xSentiment.error,
-        xTweets: xSentiment.tweets.slice(0, 3), // Top 3 tweets for display
-        xPostsAnalyzed: xSentiment.tweets.length, // Total posts analyzed
+        trends: flexibleAnalysis.combinedNews,
+        searchTerms: searchTerms,
+        tokenAnalysis: flexibleAnalysis.tokenAnalysis,
+        xSentiment: flexibleAnalysis.overallSentiment,
+        xError: xErrors.length > 0 ? xErrors.join("; ") : undefined,
+        xTweets: allXTweets.slice(0, 5), // Top 5 tweets for display
+        xPostsAnalyzed: allXTweets.length, // Total posts analyzed
       };
 
       console.log(`📈 Processed market data:`, {
         sentiment: marketData.sentiment,
-        newsCount: newsHeadlines.length,
+        newsCount: flexibleAnalysis.combinedNews.length,
+        searchTerms: searchTerms.join(", "),
+        tokensAnalyzed: flexibleAnalysis.tokenAnalysis.length,
         xSentiment: marketData.xSentiment,
         xPostsAnalyzed: marketData.xPostsAnalyzed,
-        xEnabled: !xSentiment.error?.includes("disabled"),
       });
 
       return marketData;
@@ -248,6 +254,35 @@ export class ScannerAgent {
         xError: error.message,
       };
     }
+  }
+
+  private extractSearchTermsFromHoldings(balance?: { hbars: string; tokens: any[] }): string[] {
+    const searchTerms: string[] = [];
+    
+    // Always include HBAR as a base search term
+    searchTerms.push("HBAR");
+    
+    if (balance?.tokens && Array.isArray(balance.tokens)) {
+      balance.tokens.forEach((token: any) => {
+        // Extract token symbol if available
+        if (token.symbol && typeof token.symbol === 'string') {
+          const symbol = token.symbol.toUpperCase();
+          if (!searchTerms.includes(symbol)) {
+            searchTerms.push(symbol);
+          }
+        }
+        // Also try to extract from token name if symbol is not available
+        else if (token.name && typeof token.name === 'string') {
+          const name = token.name.toUpperCase();
+          if (!searchTerms.includes(name)) {
+            searchTerms.push(name);
+          }
+        }
+      });
+    }
+    
+    // Limit to top 5 search terms to avoid overwhelming the news API
+    return searchTerms.slice(0, 5);
   }
 
   private calculateRiskScore(analysis: AnalysisResult): number {

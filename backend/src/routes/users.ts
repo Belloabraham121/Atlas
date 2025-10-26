@@ -13,6 +13,7 @@ import {
   getContextualHistory,
   getUserContext,
 } from "../store/chats.js";
+import { resolveAccountId } from "../utils/hedera.js";
 
 const router = express.Router();
 
@@ -245,22 +246,31 @@ router.post(
         return res.status(400).json({ error: "Missing message" });
       }
 
-      console.log(`💬 Legacy streaming chat request from ${userId}: ${message}`);
+      // Convert EVM address to Hedera account ID if needed
+      let hederaAccountId: string;
+      try {
+        const accountId = resolveAccountId(userId);
+        hederaAccountId = accountId.toString();
+        console.log(`💬 Legacy streaming chat request from ${userId} (Hedera ID: ${hederaAccountId}): ${message}`);
+      } catch (error) {
+        console.error(`Failed to resolve account ID for ${userId}:`, error);
+        return res.status(400).json({ error: "Invalid account ID or EVM address" });
+      }
 
       // Create a new chat if no chatId provided (for backward compatibility)
       let activeChatId = chatId;
       if (!activeChatId) {
-        const userContext = getUserContext(userId);
+        const userContext = getUserContext(hederaAccountId);
         if (userContext && userContext.currentChatId) {
           activeChatId = userContext.currentChatId;
         } else {
-          const newChat = createNewChat(userId, "Legacy Stream Chat");
+          const newChat = createNewChat(hederaAccountId, "Legacy Stream Chat");
           activeChatId = newChat.id;
         }
       }
 
       // Add user message to chat
-      const userMessage = addMessageToChat(activeChatId, userId, "user", message.trim());
+      const userMessage = addMessageToChat(activeChatId, hederaAccountId, "user", message.trim());
 
       // Set up Server-Sent Events
       res.writeHead(200, {
@@ -273,8 +283,74 @@ router.post(
 
       // Helper function to send SSE data
       const sendStep = (step: string, data: any) => {
-        res.write(`event: ${step}\n`);
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
+        try {
+          // Create a safe copy of the data to avoid circular references
+          const safeData = createSafeDataCopy(data);
+          const jsonData = JSON.stringify(safeData);
+          
+          // Validate the JSON is properly formed
+          JSON.parse(jsonData); // This will throw if malformed
+          
+          res.write(`event: ${step}\n`);
+          res.write(`data: ${jsonData}\n\n`);
+        } catch (error) {
+          console.error(`Error serializing SSE data for step ${step}:`, error);
+          console.error('Data that failed to serialize:', data);
+          // Send a safe error message instead
+          try {
+            const errorData = JSON.stringify({ 
+              error: 'Serialization failed', 
+              step,
+              message: error instanceof Error ? error.message : 'Unknown error'
+            });
+            res.write(`event: ${step}\n`);
+            res.write(`data: ${errorData}\n\n`);
+          } catch (fallbackError) {
+            console.error('Even fallback serialization failed:', fallbackError);
+            res.write(`event: error\n`);
+            res.write(`data: {"error": "Critical serialization failure"}\n\n`);
+          }
+        }
+      };
+
+      // Helper function to create a safe copy of data for serialization
+      const createSafeDataCopy = (obj: any, seen = new WeakSet()): any => {
+        if (obj === null || typeof obj !== 'object') {
+          return obj;
+        }
+
+        // Handle circular references
+        if (seen.has(obj)) {
+          return '[Circular Reference]';
+        }
+        seen.add(obj);
+
+        // Handle arrays
+        if (Array.isArray(obj)) {
+          return obj.map(item => createSafeDataCopy(item, seen));
+        }
+
+        // Handle dates
+        if (obj instanceof Date) {
+          return obj.toISOString();
+        }
+
+        // Handle functions
+        if (typeof obj === 'function') {
+          return '[Function]';
+        }
+
+        // Handle other objects
+        const result: any = {};
+        for (const [key, value] of Object.entries(obj)) {
+          try {
+            result[key] = createSafeDataCopy(value, seen);
+          } catch (error) {
+            result[key] = '[Unserializable]';
+          }
+        }
+
+        return result;
       };
 
       // Send user message confirmation
@@ -287,7 +363,7 @@ router.post(
         // Get conversation context if requested
         let contextHistory: any[] = [];
         if (useContext) {
-          const history = getContextualHistory(userId, activeChatId);
+          const history = getContextualHistory(hederaAccountId, activeChatId);
           contextHistory = history.slice(-10).map(msg => ({
             role: msg.role,
             content: msg.content,
@@ -298,7 +374,7 @@ router.post(
         // Process the message through the streaming Chat Agent with context
         await chatAgent.processUserCommandStreamingWithContext(
           message.trim(),
-          userId,
+          hederaAccountId,
           contextHistory,
           (step: string, data: any) => {
             sendStep(step, data);
@@ -315,7 +391,7 @@ router.post(
         if (assistantResponse) {
           const assistantMessage = addMessageToChat(
             activeChatId,
-            userId,
+            hederaAccountId,
             "assistant",
             assistantResponse,
             {
