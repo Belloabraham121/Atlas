@@ -11,7 +11,7 @@ import WalletConnection from "@/components/WalletConnection";
 import Link from "next/link";
 import { useChatWithStorage } from "@/hooks/use-chat-with-storage";
 import { MessageContent } from "@/components/MessageContent";
-import { ChatMessage } from "@/lib/chat-storage";
+import { ChatMessage } from "@/lib/indexeddb-storage";
 import { Trash2 } from "lucide-react";
 import {
   AlertDialog,
@@ -43,7 +43,7 @@ export function ChatInterface() {
     sendMessage,
     clearMessages,
     hederaAccountId,
-  } = useChatWithStorage();
+  } = useChatWithStorage(address);
 
   const [input, setInput] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);

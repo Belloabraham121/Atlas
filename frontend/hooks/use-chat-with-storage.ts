@@ -1,392 +1,413 @@
-"use client";
-
 import { useState, useCallback, useEffect } from "react";
-import { useAccount } from "wagmi";
 import { useChatStream } from "./use-chat-stream";
 import {
-  ChatConversation,
-  ChatMessage,
   createNewChat,
   getUserChats,
   getChatById,
   getChatMessages,
   addMessageToChat,
   updateUserContext,
+  getUserContext,
+  deleteChat,
+  updateChatTitle,
   setCurrentUser,
   getCurrentUser,
   clearCurrentUser,
-  deleteChat,
-  updateChatTitle,
   searchChats,
-} from "@/lib/chat-storage";
+  ChatConversation,
+  ChatMessage,
+} from "@/lib/indexeddb-storage";
 
 export interface UseChatWithStorageReturn {
-  // Chat conversations
+  // State
   conversations: ChatConversation[];
   currentConversation: ChatConversation | null;
-  
-  // Messages
   messages: ChatMessage[];
+  isLoading: boolean;
+
+  // Chat management
+  createChat: (title?: string) => Promise<ChatConversation | null>;
+  selectChat: (chatId: string) => Promise<void>;
+  deleteChat: (chatId: string) => Promise<boolean>;
+  updateChatTitle: (chatId: string, title: string) => Promise<boolean>;
+
+  // Message management
+  sendMessage: (content: string) => Promise<void>;
+
+  // Stream integration
+  streamMessages: any[];
   isStreaming: boolean;
-  error: string | null;
-  
-  // Actions
-  createChat: (title?: string) => ChatConversation;
-  selectChat: (chatId: string) => void;
-  deleteChat: (chatId: string) => boolean;
-  updateChatTitle: (chatId: string, title: string) => boolean;
-  sendMessage: (message: string) => Promise<void>;
-  clearMessages: () => void;
-  searchChats: (query: string) => ChatConversation[];
-  
-  // Connection status
-  isConnected: boolean;
-  hederaAccountId: string | null;
+  streamError: string | null;
+  streamSendMessage: (content: string) => void;
+  streamClearMessages: () => void;
+
+  // Search
+  searchChats: (query: string) => Promise<ChatConversation[]>;
+
+  // User management
+  setCurrentUser: (userId: string) => Promise<void>;
+  getCurrentUser: () => Promise<string | null>;
+  clearCurrentUser: () => Promise<void>;
 }
 
-export function useChatWithStorage(): UseChatWithStorageReturn {
-  const { address, isConnected } = useAccount();
+export function useChatWithStorage(address?: string): UseChatWithStorageReturn {
+  // Local state
+  const [conversations, setConversations] = useState<ChatConversation[]>([]);
+  const [currentConversation, setCurrentConversation] = useState<ChatConversation | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Stream integration
   const {
     messages: streamMessages,
     isStreaming,
     error: streamError,
     sendMessage: streamSendMessage,
     clearMessages: streamClearMessages,
-    hederaAccountId,
   } = useChatStream();
 
-  const [conversations, setConversations] = useState<ChatConversation[]>([]);
-  const [currentConversation, setCurrentConversation] = useState<ChatConversation | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  // Initialize user and load conversations when wallet connects
-  useEffect(() => {
-    if (isConnected && address) {
-      setCurrentUser(address);
-      loadUserConversations();
-    } else {
-      clearCurrentUser();
-      setConversations([]);
-      setCurrentConversation(null);
-      setMessages([]);
-    }
-  }, [isConnected, address]);
-
-  // Load user conversations from local storage
-  const loadUserConversations = useCallback(() => {
+  // Load user conversations from IndexedDB
+  const loadUserConversations = useCallback(async () => {
     if (!address) return;
     
-    const userChats = getUserChats(address);
-    setConversations(userChats);
-    
-    // If there's no current conversation but there are chats, select the most recent one
-    if (userChats.length > 0 && !currentConversation) {
-      const mostRecent = userChats[0];
-      setCurrentConversation(mostRecent);
-      loadChatMessages(mostRecent.id);
-      updateUserContext(address, mostRecent.id);
+    try {
+      setIsLoading(true);
+      const userChats = await getUserChats(address);
+      setConversations(userChats);
+      
+      // If there's no current conversation but there are chats, select the most recent one
+      if (userChats.length > 0 && !currentConversation) {
+        const mostRecent = userChats[0];
+        setCurrentConversation(mostRecent);
+        await loadChatMessages(mostRecent.id);
+        await updateUserContext(address, mostRecent.id);
+      }
+    } catch (error) {
+      console.error("Failed to load conversations:", error);
+    } finally {
+      setIsLoading(false);
     }
   }, [address, currentConversation]);
 
   // Load messages for a specific chat
-  const loadChatMessages = useCallback((chatId: string) => {
-    const chatMessages = getChatMessages(chatId);
-    setMessages(chatMessages);
+  const loadChatMessages = useCallback(async (chatId: string) => {
+    try {
+      const messages = await getChatMessages(chatId);
+      setMessages(messages);
+    } catch (error) {
+      console.error("Failed to load chat messages:", error);
+    }
   }, []);
 
   // Create a new chat
-  const createChat = useCallback((title?: string): ChatConversation => {
+  const createChat = useCallback(async (title?: string): Promise<ChatConversation | null> => {
     if (!address) {
-      throw new Error("User must be connected to create a chat");
-    }
-
-    const newChat = createNewChat(address, title);
-    
-    // Update local state
-    setConversations(prev => [newChat, ...prev]);
-    setCurrentConversation(newChat);
-    setMessages([]);
-    
-    // Clear streaming messages when creating a new chat to prevent old messages from showing
-    streamClearMessages();
-    
-    return newChat;
-  }, [address, streamClearMessages]);
-
-  // Select a chat
-  const selectChat = useCallback((chatId: string) => {
-    if (!address) return;
-
-    const chat = getChatById(chatId);
-    if (!chat) return;
-
-    setCurrentConversation(chat);
-    loadChatMessages(chatId);
-    updateUserContext(address, chatId);
-    
-    // Clear streaming messages when switching chats
-    streamClearMessages();
-  }, [address, loadChatMessages, streamClearMessages]);
-
-  // Delete a chat
-  const deleteChatHandler = useCallback((chatId: string): boolean => {
-    const success = deleteChat(chatId);
-    
-    if (success) {
-      // Update local state
-      setConversations(prev => prev.filter(chat => chat.id !== chatId));
-      
-      // If we deleted the current chat, select another one or clear
-      if (currentConversation?.id === chatId) {
-        const remainingChats = conversations.filter(chat => chat.id !== chatId);
-        if (remainingChats.length > 0) {
-          selectChat(remainingChats[0].id);
-        } else {
-          setCurrentConversation(null);
-          setMessages([]);
-          streamClearMessages();
-        }
-      }
-    }
-    
-    return success;
-  }, [conversations, currentConversation, selectChat, streamClearMessages]);
-
-  // Update chat title
-  const updateChatTitleHandler = useCallback((chatId: string, title: string): boolean => {
-    const success = updateChatTitle(chatId, title);
-    
-    if (success) {
-      // Update local state
-      setConversations(prev => 
-        prev.map(chat => 
-          chat.id === chatId ? { ...chat, title, updatedAt: Date.now() } : chat
-        )
-      );
-      
-      // Update current conversation if it's the one being updated
-      if (currentConversation?.id === chatId) {
-        setCurrentConversation(prev => 
-          prev ? { ...prev, title, updatedAt: Date.now() } : null
-        );
-      }
-    }
-    
-    return success;
-  }, [currentConversation]);
-
-  // Send a message
-  const sendMessage = useCallback(async (message: string) => {
-    if (!address) {
-      setError("Please connect your wallet to send a message");
-      return;
-    }
-
-    // If no current conversation, create a new one
-    let conversation = currentConversation;
-    if (!conversation) {
-      conversation = createChat("New Chat");
+      console.error("User must be connected to create a chat");
+      return null;
     }
 
     try {
-      setError(null);
+      setIsLoading(true);
+      const newChat = await createNewChat(address, title);
       
-      // Add user message to local storage
-      const userMessage = addMessageToChat(
-        conversation.id,
-        address,
-        'user',
-        message
-      );
+      // Update local state
+      setConversations(prev => [newChat, ...prev]);
+      setCurrentConversation(newChat);
+      setMessages([]);
       
-      // Update local messages state
-      setMessages(prev => [...prev, userMessage]);
+      // Clear streaming messages when creating a new chat to prevent old messages from showing
+      streamClearMessages();
       
-      // Update conversation in local state
-      setConversations(prev => 
-        prev.map(chat => 
-          chat.id === conversation.id 
-            ? { 
-                ...chat, 
-                messageCount: chat.messageCount + 1,
-                lastMessage: message.substring(0, 100) + (message.length > 100 ? '...' : ''),
-                updatedAt: Date.now()
-              }
-            : chat
-        )
-      );
-      
-      // Send message through streaming hook
-      await streamSendMessage(message);
-      
+      return newChat;
     } catch (error) {
-      console.error("Error sending message:", error);
-      setError(error instanceof Error ? error.message : "Failed to send message");
+      console.error("Failed to create chat:", error);
+      return null;
+    } finally {
+      setIsLoading(false);
     }
-  }, [address, currentConversation, streamSendMessage, createChat]);
+  }, [address, streamClearMessages]);
 
-  // Handle streaming messages - add them to local storage when complete
-  useEffect(() => {
-    if (!isStreaming && streamMessages.length > 0 && currentConversation && address) {
-      // Get all assistant messages from the stream
-      const assistantMessages = streamMessages.filter(msg => msg.role === 'assistant');
-      
-      if (assistantMessages.length > 0) {
-        // Get existing messages to check for duplicates
-        const existingMessages = getChatMessages(currentConversation.id);
-        
-        // Separate messages with graphs from those without
-        const messagesWithGraphs = assistantMessages.filter(msg => msg.graphs && msg.graphs.length > 0);
-        const messagesWithoutGraphs = assistantMessages.filter(msg => !msg.graphs || msg.graphs.length === 0);
-        
-        // Combine text-only messages
-        const combinedTextContent = messagesWithoutGraphs
-          .map(msg => msg.content)
-          .join('\n\n');
-        
-        // Check if this combined text message is already in local storage
-        const textMessageExists = existingMessages.some(msg => 
-          msg.content === combinedTextContent && 
-          msg.role === 'assistant' &&
-          (!msg.metadata?.graphs || msg.metadata.graphs.length === 0)
-        );
-        
-        // Add combined text message if it doesn't exist and has content
-        if (!textMessageExists && combinedTextContent.trim()) {
-          addMessageToChat(
-            currentConversation.id,
-            address,
-            'assistant',
-            combinedTextContent,
-            {
-              graphs: [], // Explicitly no graphs for text-only messages
-            }
-          );
-        }
-        
-        // Handle each message with graphs separately to prevent mixing
-        messagesWithGraphs.forEach(graphMessage => {
-          // Check if this specific graph message already exists
-          const graphMessageExists = existingMessages.some(msg => 
-            msg.content === graphMessage.content && 
-            msg.role === 'assistant' &&
-            msg.metadata?.graphs && 
-            msg.metadata.graphs.length > 0 &&
-            JSON.stringify(msg.metadata.graphs) === JSON.stringify(graphMessage.graphs)
-          );
-          
-          if (!graphMessageExists) {
-            addMessageToChat(
-              currentConversation.id,
-              address,
-              'assistant',
-              graphMessage.content,
-              {
-                graphs: graphMessage.graphs || [],
-              }
-            );
-          }
-        });
-        
-        // Update conversation metadata only once
-        const totalNewMessages = (combinedTextContent.trim() ? 1 : 0) + 
-          messagesWithGraphs.filter(msg => !existingMessages.some(existing => 
-            existing.content === msg.content && 
-            existing.role === 'assistant' &&
-            JSON.stringify(existing.metadata?.graphs) === JSON.stringify(msg.graphs)
-          )).length;
-        
-        if (totalNewMessages > 0) {
-          // Update conversation in local state
-          setConversations(prev => 
-            prev.map(chat => 
-              chat.id === currentConversation.id 
-                ? { 
-                    ...chat, 
-                    messageCount: chat.messageCount + totalNewMessages,
-                    lastMessage: (combinedTextContent || messagesWithGraphs[messagesWithGraphs.length - 1]?.content || '').substring(0, 100) + 
-                      ((combinedTextContent || messagesWithGraphs[messagesWithGraphs.length - 1]?.content || '').length > 100 ? '...' : ''),
-                    updatedAt: Date.now()
-                  }
-                : chat
-            )
-          );
-          
-          // Reload messages from storage to ensure consistency
-          const updatedMessages = getChatMessages(currentConversation.id);
-          setMessages(updatedMessages);
+  // Select a chat
+  const selectChat = useCallback(async (chatId: string) => {
+    try {
+      setIsLoading(true);
+      const conversation = await getChatById(chatId);
+      if (conversation) {
+        setCurrentConversation(conversation);
+        await loadChatMessages(chatId);
+        if (address) {
+          await updateUserContext(address, chatId);
         }
       }
+    } catch (error) {
+      console.error("Failed to select chat:", error);
+    } finally {
+      setIsLoading(false);
     }
-  }, [isStreaming, streamMessages, currentConversation, address]);
+  }, [address, loadChatMessages]);
 
-  // Clear messages
-  const clearMessages = useCallback(() => {
-    setMessages([]);
-    streamClearMessages();
-  }, [streamClearMessages]);
+  // Delete a chat
+  const deleteChatHandler = useCallback(async (chatId: string): Promise<boolean> => {
+    try {
+      setIsLoading(true);
+      const success = await deleteChat(chatId);
+      if (success) {
+        setConversations(prev => prev.filter(conv => conv.id !== chatId));
+        
+        // If we deleted the current conversation, clear it
+        if (currentConversation?.id === chatId) {
+          setCurrentConversation(null);
+          setMessages([]);
+        }
+      }
+      return success;
+    } catch (error) {
+      console.error("Failed to delete chat:", error);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentConversation]);
 
-  // Search chats
-  const searchChatsHandler = useCallback((query: string): ChatConversation[] => {
-    if (!address) return [];
-    return searchChats(address, query);
-  }, [address]);
+  // Update chat title
+  const updateChatTitleHandler = useCallback(async (chatId: string, title: string): Promise<boolean> => {
+    try {
+      const success = await updateChatTitle(chatId, title);
+      if (success) {
+        setConversations(prev => 
+          prev.map(conv => 
+            conv.id === chatId ? { ...conv, title } : conv
+          )
+        );
+        
+        if (currentConversation?.id === chatId) {
+          setCurrentConversation(prev => prev ? { ...prev, title } : null);
+        }
+      }
+      return success;
+    } catch (error) {
+      console.error("Failed to update chat title:", error);
+      return false;
+    }
+  }, [currentConversation]);
 
-  // Combine stream error with local error
-  const combinedError = error || streamError;
+  // Send a message
+  const sendMessage = useCallback(async (content: string) => {
+    if (!address) return;
 
-  // Convert stream messages to ChatMessage format for consistency
-  const convertedStreamMessages: ChatMessage[] = streamMessages.map(msg => ({
-    id: msg.id,
-    chatId: currentConversation?.id || 'temp',
-    userId: address || 'unknown',
-    role: msg.role,
-    content: msg.content,
-    timestamp: msg.timestamp.getTime(),
-    metadata: {
-      graphs: msg.graphs,
-    },
-  }));
+    try {
+      // If no current conversation exists, create one
+      let conversation = currentConversation;
+      if (!conversation) {
+        conversation = await createChat("New Chat");
+        if (!conversation) {
+          console.error("Failed to create new conversation");
+          return;
+        }
+      }
 
-  // Determine which messages to show
+      // Add user message to storage
+      const userMessage = await addMessageToChat(
+        conversation.id,
+        address,
+        "user",
+        content
+      );
+
+      if (userMessage) {
+        setMessages(prev => [...prev, userMessage]);
+        
+        // Update conversation metadata
+        const updatedConversation = {
+          ...conversation,
+          messageCount: (conversation.messageCount || 0) + 1,
+          lastMessage: content.substring(0, 100),
+          updatedAt: Date.now(),
+        };
+        setCurrentConversation(updatedConversation);
+        setConversations(prev => 
+          prev.map(conv => 
+            conv.id === conversation.id ? updatedConversation : conv
+          )
+        );
+      }
+
+      // Send to stream for AI response
+      streamSendMessage(content);
+    } catch (error) {
+      console.error("Failed to send message:", error);
+    }
+  }, [address, currentConversation, createChat, streamSendMessage]);
+
+  // Handle streaming messages and save them to storage when complete
+  useEffect(() => {
+    if (!isStreaming && streamMessages.length > 0 && address && currentConversation) {
+      const assistantMessages = streamMessages.filter(msg => msg.role === "assistant");
+      
+      assistantMessages.forEach(async (streamMsg) => {
+        try {
+          // Check if this message already exists in local storage
+          const existingMessages = await getChatMessages(currentConversation.id);
+          const isDuplicate = existingMessages.some(existing => 
+            existing.role === "assistant" && 
+            existing.content === streamMsg.content &&
+            Math.abs(existing.timestamp - streamMsg.timestamp.getTime()) < 5000 // Within 5 seconds
+          );
+
+          if (!isDuplicate) {
+            const savedMessage = await addMessageToChat(
+               currentConversation.id,
+               address,
+               "assistant",
+               streamMsg.content,
+               streamMsg.graphs ? { graphs: streamMsg.graphs } : undefined
+             );
+
+            if (savedMessage) {
+              // Reload messages to get the latest state
+              const updatedMessages = await getChatMessages(currentConversation.id);
+              setMessages(updatedMessages);
+
+              // Update conversation metadata
+              const messageCount = updatedMessages.length;
+              const lastMessage = updatedMessages[messageCount - 1]?.content.substring(0, 100) || "";
+              
+              const updatedConversation = {
+                ...currentConversation,
+                messageCount,
+                lastMessage,
+                updatedAt: Date.now(),
+              };
+              setCurrentConversation(updatedConversation);
+              setConversations(prev => 
+                prev.map(conv => 
+                  conv.id === currentConversation.id ? updatedConversation : conv
+                )
+              );
+            }
+          }
+        } catch (error) {
+          console.error("Failed to save assistant message:", error);
+        }
+      });
+    }
+  }, [isStreaming, streamMessages, address, currentConversation]);
+
+  // Load conversations when wallet connects
+  useEffect(() => {
+    if (address) {
+      loadUserConversations();
+    }
+  }, [address, loadUserConversations]);
+
+  // Determine which messages to display
   const displayMessages = (() => {
     if (!currentConversation) {
-      // No conversation selected, show stream messages for new chats
-      return convertedStreamMessages;
+      // If no conversation is selected, show converted stream messages
+      return streamMessages.map(msg => ({
+         id: msg.id,
+         chatId: "",
+         userId: address || "",
+         role: msg.role,
+         content: msg.content,
+         timestamp: msg.timestamp.getTime(),
+         contentHash: "",
+         metadata: msg.graphs ? { graphs: msg.graphs } : undefined,
+       }));
     }
-    
-    if (isStreaming && streamMessages.length > 0) {
-      // During streaming, show local messages plus live stream messages
-      // Use more precise duplicate detection based on content and exact timestamp
-      const localMessagesWithoutDuplicates = messages.filter(localMsg => 
-        !streamMessages.some(streamMsg => 
-          streamMsg.role === localMsg.role && 
-          streamMsg.content === localMsg.content &&
-          Math.abs(streamMsg.timestamp.getTime() - localMsg.timestamp) < 1000 // Reduced to 1 second for more precision
-        )
+
+    if (isStreaming) {
+      // During streaming, merge local and stream messages, avoiding duplicates
+      const streamMsgs = streamMessages.map(msg => ({
+         id: msg.id,
+         chatId: currentConversation.id,
+         userId: address || "",
+         role: msg.role,
+         content: msg.content,
+         timestamp: msg.timestamp.getTime(),
+         contentHash: "",
+         metadata: msg.graphs ? { graphs: msg.graphs } : undefined,
+       }));
+
+      // Combine and deduplicate
+      const allMessages = [...messages, ...streamMsgs];
+      const uniqueMessages = allMessages.filter((msg, index, arr) => 
+        arr.findIndex(m => m.content === msg.content && m.role === msg.role) === index
       );
-      return [...localMessagesWithoutDuplicates, ...convertedStreamMessages];
+      
+      return uniqueMessages.sort((a, b) => a.timestamp - b.timestamp);
     }
-    
-    // Not streaming, show local stored messages
+
+    // When not streaming, show local stored messages
     return messages;
   })();
 
+  // Search chats
+  const searchChatsHandler = useCallback(async (query: string): Promise<ChatConversation[]> => {
+    if (!address) return [];
+    try {
+      return await searchChats(address, query);
+    } catch (error) {
+      console.error("Failed to search chats:", error);
+      return [];
+    }
+  }, [address]);
+
+  // User management
+  const setCurrentUserHandler = useCallback(async (userId: string) => {
+    try {
+      await setCurrentUser(userId);
+    } catch (error) {
+      console.error("Failed to set current user:", error);
+    }
+  }, []);
+
+  const getCurrentUserHandler = useCallback(async (): Promise<string | null> => {
+    try {
+      return await getCurrentUser();
+    } catch (error) {
+      console.error("Failed to get current user:", error);
+      return null;
+    }
+  }, []);
+
+  const clearCurrentUserHandler = useCallback(async () => {
+    try {
+      await clearCurrentUser();
+    } catch (error) {
+      console.error("Failed to clear current user:", error);
+    }
+  }, []);
+
   return {
+    // State
     conversations,
     currentConversation,
     messages: displayMessages,
-    isStreaming,
-    error: combinedError,
+    isLoading,
+
+    // Chat management
     createChat,
     selectChat,
     deleteChat: deleteChatHandler,
     updateChatTitle: updateChatTitleHandler,
+
+    // Message management
     sendMessage,
-    clearMessages,
+
+    // Stream integration
+    streamMessages,
+    isStreaming,
+    streamError,
+    streamSendMessage,
+    streamClearMessages,
+
+    // Search
     searchChats: searchChatsHandler,
-    isConnected,
-    hederaAccountId,
+
+    // User management
+    setCurrentUser: setCurrentUserHandler,
+    getCurrentUser: getCurrentUserHandler,
+    clearCurrentUser: clearCurrentUserHandler,
   };
 }

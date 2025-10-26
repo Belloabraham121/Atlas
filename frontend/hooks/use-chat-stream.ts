@@ -40,6 +40,7 @@ export function useChatStream(): UseChatStreamReturn {
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const currentStreamingMessageRef = useRef<string>("");
+  const hasHandledResponseRef = useRef<boolean>(false);
 
   const clearMessages = useCallback(() => {
     setMessages([]);
@@ -64,6 +65,7 @@ export function useChatStream(): UseChatStreamReturn {
       setError(null);
       setIsStreaming(true);
       currentStreamingMessageRef.current = "";
+      hasHandledResponseRef.current = false;
 
       // Add user message immediately
       const userMessage: ChatStreamMessage = {
@@ -94,7 +96,7 @@ export function useChatStream(): UseChatStreamReturn {
         console.log("Debug - wallet address:", address);
         console.log("Debug - isConnected:", isConnected);
         console.log("Debug - userId for API:", userId);
-        const apiUrl = `http://localhost:3001/api/0.0.2/chat-stream`;
+        const apiUrl = `http://localhost:3001/api/${userId}/chat-stream`;
         console.log("Debug - API URL:", apiUrl);
 
         // Close any existing EventSource
@@ -418,17 +420,20 @@ export function useChatStream(): UseChatStreamReturn {
           'response' in data.data) {
         console.log('🤖 LLM complete event detected:', data);
         console.log('🧠 LLM data:', data.data);
-        const formattedData = formatLLMData(data.data);
-        console.log('✨ Formatted LLM data:', formattedData);
+        
+        // Use the actual response content directly instead of just "analysis complete"
+        const responseContent = data.data.response || 'No response content available';
+        console.log('📝 LLM response content:', responseContent);
         
         const stepAssistantMessage: ChatStreamMessage = {
           id: (Date.now() + Math.random()).toString(),
           role: "assistant",
-          content: `✅ AI analysis complete\n\n${formattedData}`,
+          content: responseContent,
           timestamp: new Date(),
           isStreaming: false,
         };
         setMessages((prev) => [...prev, stepAssistantMessage]);
+        hasHandledResponseRef.current = true; // Mark that we've handled the response
         return;
       }
 
@@ -661,6 +666,11 @@ export function useChatStream(): UseChatStreamReturn {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
+      }
+
+      // If we've already handled the response with individual messages, don't overwrite
+      if (hasHandledResponseRef.current) {
+        return;
       }
 
       // Combine accumulated streaming content with final content
