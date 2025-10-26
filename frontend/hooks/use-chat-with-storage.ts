@@ -108,10 +108,11 @@ export function useChatWithStorage(): UseChatWithStorageReturn {
     setCurrentConversation(newChat);
     setMessages([]);
     
-    // Don't clear streaming messages - let user continue with current conversation
+    // Clear streaming messages when creating a new chat to prevent old messages from showing
+    streamClearMessages();
     
     return newChat;
-  }, [address]);
+  }, [address, streamClearMessages]);
 
   // Select a chat
   const selectChat = useCallback((chatId: string) => {
@@ -228,41 +229,41 @@ export function useChatWithStorage(): UseChatWithStorageReturn {
   // Handle streaming messages - add them to local storage when complete
   useEffect(() => {
     if (!isStreaming && streamMessages.length > 0 && currentConversation && address) {
-      // Find the last assistant message from the stream
-      const lastAssistantMessage = streamMessages
-        .slice()
-        .reverse()
-        .find(msg => msg.role === 'assistant');
+      // Get all assistant messages from the stream
+      const assistantMessages = streamMessages.filter(msg => msg.role === 'assistant');
       
-      if (lastAssistantMessage) {
-        // Check if this message is already in local storage
+      if (assistantMessages.length > 0) {
+        // Get existing messages to check for duplicates
         const existingMessages = getChatMessages(currentConversation.id);
+        
+        // Combine all assistant message content into one message
+        const combinedContent = assistantMessages
+          .map(msg => msg.content)
+          .join('\n\n');
+        
+        // Check if this combined message is already in local storage
         const messageExists = existingMessages.some(msg => 
-          msg.content === lastAssistantMessage.content && 
-          msg.role === 'assistant' &&
-          Math.abs(msg.timestamp - lastAssistantMessage.timestamp.getTime()) < 5000 // Within 5 seconds
+          msg.content === combinedContent && 
+          msg.role === 'assistant'
         );
         
-        if (!messageExists) {
-          // Add assistant message to local storage
+        if (!messageExists && combinedContent.trim()) {
+          // Get graphs from the last message that has them
+          const messageWithGraphs = assistantMessages
+            .slice()
+            .reverse()
+            .find(msg => msg.graphs && msg.graphs.length > 0);
+          
+          // Add combined assistant message to local storage
           const assistantMessage = addMessageToChat(
             currentConversation.id,
             address,
             'assistant',
-            lastAssistantMessage.content,
+            combinedContent,
             {
-              graphs: lastAssistantMessage.graphs,
+              graphs: messageWithGraphs?.graphs || [],
             }
           );
-          
-          // Update local messages state
-          setMessages(prev => {
-            // Remove any existing assistant message with the same content to avoid duplicates
-            const filtered = prev.filter(msg => 
-              !(msg.role === 'assistant' && msg.content === lastAssistantMessage.content)
-            );
-            return [...filtered, assistantMessage];
-          });
           
           // Update conversation in local state
           setConversations(prev => 
@@ -271,13 +272,17 @@ export function useChatWithStorage(): UseChatWithStorageReturn {
                 ? { 
                     ...chat, 
                     messageCount: chat.messageCount + 1,
-                    lastMessage: lastAssistantMessage.content.substring(0, 100) + 
-                      (lastAssistantMessage.content.length > 100 ? '...' : ''),
+                    lastMessage: combinedContent.substring(0, 100) + 
+                      (combinedContent.length > 100 ? '...' : ''),
                     updatedAt: Date.now()
                   }
                 : chat
             )
           );
+          
+          // Reload messages from storage to ensure consistency
+          const updatedMessages = getChatMessages(currentConversation.id);
+          setMessages(updatedMessages);
         }
       }
     }
