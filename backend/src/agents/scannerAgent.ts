@@ -21,7 +21,7 @@ interface AnalysisResult {
 
 export class ScannerAgent {
   private agentName = "scanner@portfolio.guard";
-  private baseUrl = "http://localhost:3000";
+  private baseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
 
   constructor() {
     bus.registerAgent(this.agentName);

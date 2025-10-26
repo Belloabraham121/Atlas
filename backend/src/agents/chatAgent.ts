@@ -184,9 +184,11 @@ export class ChatAgent {
     const tokenSymbolMatch = lowerMessage.match(/\b(ethereum|bitcoin|hedera|polygon|cardano|polkadot|chainlink|uniswap|compound|synthetix|balancer|sushiswap|decentraland|numeraire|republic|loopring|alchemix|olympus|liquity|sandbox|chromia|aragon|bancor|iexec|enjin|smooth|alien|convex|maker|yearn|curve|hbar|usdc|usdt|btc|eth|matic|ada|dot|link|uni|aave|comp|mkr|snx|yfi|1inch|crv|bal|sushi|alpha|cream|badger|rook|farm|pickle|cover|armor|bond|digg|bnt|knc|kyber|lrc|zrx|ren|storj|grt|uma|band|ocean|fet|agi|nmr|rlc|ant|mana|enj|sand|axs|axie|slp|chr|alice|tlm|audio|rari|tribe|fei|rai|lusd|frax|ohm|klima|time|memo|spell|ice|mim|cvx|fxs|alcx)\b/);
     const tokenIdMatch = lowerMessage.match(/token\s+(\d+\.\d+\.\d+)/);
     
-    // Extract timeframe
+    // Extract timeframe - enhanced to handle flexible formats
     const timeframeMatch = lowerMessage.match(/\b(1h|4h|24h|7d|30d|1y|all)\b/) || 
-                          lowerMessage.match(/\b(hour|day|week|month|year)\b/);
+                          lowerMessage.match(/\b(hour|day|week|month|year)\b/) ||
+                          lowerMessage.match(/\b(\d+)\s*(days?|hours?|weeks?|months?|years?)\b/) ||
+                          lowerMessage.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten)\s*(days?|hours?|weeks?|months?|years?)\b/);
     
     // Extract chart type
     const chartTypeMatch = lowerMessage.match(/\b(price|volume|market cap|correlation|performance|history)\b/);
@@ -309,12 +311,59 @@ export class ChatAgent {
     let timeframe = "24h"; // Default timeframe
     if (timeframeMatch) {
       const tf = timeframeMatch[1];
-      if (tf === "hour") timeframe = "1h";
+      const tf2 = timeframeMatch[2]; // For patterns with numbers and units
+      
+      // Handle exact formats (1h, 4h, 24h, 7d, 30d, 1y, all)
+      if (tf && !tf2 && /^(1h|4h|24h|7d|30d|1y|all)$/.test(tf)) {
+        timeframe = tf;
+      }
+      // Handle singular words (hour, day, week, month, year)
+      else if (tf === "hour") timeframe = "1h";
       else if (tf === "day") timeframe = "24h";
       else if (tf === "week") timeframe = "7d";
       else if (tf === "month") timeframe = "30d";
       else if (tf === "year") timeframe = "1y";
-      else timeframe = tf;
+      // Handle number + unit patterns (7 days, 2 weeks, etc.)
+      else if (tf && tf2) {
+        const num = parseInt(tf);
+        const unit = tf2.toLowerCase();
+        
+        if (unit.startsWith('hour')) {
+          timeframe = `${num}h`;
+        } else if (unit.startsWith('day')) {
+          timeframe = `${num}d`;
+        } else if (unit.startsWith('week')) {
+          timeframe = `${num * 7}d`;
+        } else if (unit.startsWith('month')) {
+          timeframe = `${num * 30}d`;
+        } else if (unit.startsWith('year')) {
+          timeframe = `${num}y`;
+        }
+      }
+      // Handle word numbers (one, two, three, etc.)
+      else if (tf && tf2 && /^(one|two|three|four|five|six|seven|eight|nine|ten)$/.test(tf)) {
+        const wordToNumber: { [key: string]: number } = {
+          'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+          'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10
+        };
+        const num = wordToNumber[tf];
+        const unit = tf2.toLowerCase();
+        
+        if (unit.startsWith('hour')) {
+          timeframe = `${num}h`;
+        } else if (unit.startsWith('day')) {
+          timeframe = `${num}d`;
+        } else if (unit.startsWith('week')) {
+          timeframe = `${num * 7}d`;
+        } else if (unit.startsWith('month')) {
+          timeframe = `${num * 30}d`;
+        } else if (unit.startsWith('year')) {
+          timeframe = `${num}y`;
+        }
+      }
+      else {
+         timeframe = tf;
+       }
     }
 
     // Determine chart type
@@ -1275,15 +1324,14 @@ Keep the response informative and actionable.`;
         const targetUserId = intent.userId || userId;
         const isSelfScan = intent.isSelfScan || targetUserId === userId;
         
-        // Check if this is a news request (token === "all")
-        const isNewsRequest = intent.token === "all";
+        // Check for explicit news-related keywords to route to market news
+        const isNewsRequest = /\b(news|market trends?|sentiment|headlines|market (analysis|update))\b/i.test(message);
         console.log(`🔍 Debug - Intent token: ${intent.token}, isNewsRequest: ${isNewsRequest}`);
         
         if (isNewsRequest) {
-          // Handle news request by extracting search terms from user message
+          // Handle news request by extracting search terms from the user's message
           console.log(`📰 Processing news request: "${message}"`);
           
-          // Extract search terms from the user's message
           const searchTerms = await this.extractNewsSearchTerms(message, userId);
           console.log(`🔍 Extracted search terms: ${JSON.stringify(searchTerms)}`);
           
@@ -1293,7 +1341,6 @@ Keep the response informative and actionable.`;
             agent: "news@portfolio.guard",
           });
 
-          // Import and use news agent directly
           const { analyzeFlexibleQuery } = await import("./newsAgent.js");
           const newsAnalysis = await analyzeFlexibleQuery(searchTerms);
           
@@ -1303,11 +1350,10 @@ Keep the response informative and actionable.`;
             agent: "news@portfolio.guard",
           });
 
-          // Construct marketData from news analysis
           const marketData = {
-            searchTerms: searchTerms,
-            newsAnalysis: newsAnalysis,
-            timestamp: new Date().toISOString()
+            searchTerms,
+            newsAnalysis,
+            timestamp: new Date().toISOString(),
           };
 
           // Step 2: LLM Analysis
@@ -1316,7 +1362,6 @@ Keep the response informative and actionable.`;
             agent: "llm@portfolio.guard",
           });
 
-          // Send to LLM for final analysis
           bus.sendMessage({
             from: this.agentName,
             to: "llm@portfolio.guard",
@@ -1342,7 +1387,6 @@ Keep the response informative and actionable.`;
             });
           }
 
-          // Final Summary for news
           const latency = Date.now() - startTime;
           let summaryResponse = `📰 **MARKET NEWS & TRENDS**\n\n`;
           summaryResponse += `🔍 **Search Terms**: ${searchTerms.join(", ")}\n`;
@@ -1352,7 +1396,7 @@ Keep the response informative and actionable.`;
 
           sendStep("complete", {
             response: summaryResponse,
-            latency: latency,
+            latency,
           });
 
           return;

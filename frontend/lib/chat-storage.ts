@@ -123,13 +123,60 @@ export function getChatMessages(chatId: string): ChatMessage[] {
   return allMessages[chatId] || [];
 }
 
+// Message deduplication utilities
+function generateMessageHash(content: string, role: string, metadata?: ChatMessage['metadata']): string {
+  const hashData = {
+    content: content.trim(),
+    role,
+    graphs: metadata?.graphs || [],
+  };
+  
+  // Use a Unicode-safe encoding method instead of btoa
+  const jsonString = JSON.stringify(hashData);
+  let hash = '';
+  for (let i = 0; i < jsonString.length; i++) {
+    const char = jsonString.charCodeAt(i);
+    hash += char.toString(16);
+  }
+  return hash.replace(/[^a-zA-Z0-9]/g, '').substring(0, 32); // Limit length for performance
+}
+
+function isDuplicateMessage(
+  newMessage: Omit<ChatMessage, 'id' | 'timestamp'>,
+  existingMessages: ChatMessage[]
+): boolean {
+  const newHash = generateMessageHash(newMessage.content, newMessage.role, newMessage.metadata);
+  
+  return existingMessages.some(existing => {
+    const existingHash = generateMessageHash(existing.content, existing.role, existing.metadata);
+    return existingHash === newHash;
+  });
+}
+
 export function addMessageToChat(
   chatId: string,
   userId: string,
   role: 'user' | 'assistant',
   content: string,
   metadata?: ChatMessage['metadata']
-): ChatMessage {
+): ChatMessage | null {
+  // Get existing messages to check for duplicates
+  const existingMessages = getChatMessages(chatId);
+  
+  // Check for duplicates before adding
+  const newMessageData = {
+    chatId,
+    userId,
+    role,
+    content,
+    metadata,
+  };
+  
+  if (isDuplicateMessage(newMessageData, existingMessages)) {
+    console.log('Duplicate message detected, skipping:', content.substring(0, 50) + '...');
+    return null;
+  }
+
   const messageId = uuidv4();
   const now = Date.now();
 
