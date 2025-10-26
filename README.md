@@ -1,10 +1,22 @@
-# PortfolioGuard Backend
+# ATLAS - AI-Powered Hedera Portfolio Intelligence
 
-A sophisticated multi-agent system for Hedera network portfolio management and risk analysis, built with TypeScript and powered by Agent-to-Agent (A2A) communication architecture.
+**ATLAS** is a sophisticated, enterprise-grade portfolio monitoring and risk analysis system specifically designed for the Hedera Hashgraph ecosystem. Built on a cutting-edge multi-agent architecture, ATLAS employs specialized AI agents that work collaboratively to provide real-time portfolio insights, risk assessments, and market intelligence.
 
 ## 🏗️ Project Overview
 
-PortfolioGuard is a sophisticated, enterprise-grade portfolio monitoring and risk analysis system specifically designed for the Hedera Hashgraph ecosystem. Built on a cutting-edge multi-agent architecture, the system employs specialized AI agents that work collaboratively to provide real-time portfolio insights, risk assessments, and market intelligence.
+ATLAS (AI-Powered Hedera Portfolio Intelligence) is a comprehensive platform that combines the power of distributed ledger technology with advanced AI capabilities to deliver unparalleled portfolio management and market intelligence for Hedera network investments.
+
+### What ATLAS Does
+
+ATLAS serves as your intelligent guardian for Hedera network investments, providing:
+
+- **🔍 Real-time Portfolio Monitoring**: Track HBAR and token balances across multiple Hedera accounts with sub-second latency
+- **📊 AI-Powered Risk Analysis**: Machine learning-driven risk assessment based on market sentiment, portfolio composition, and historical patterns
+- **📈 Market Intelligence**: Real-time analysis of X (Twitter) sentiment, news aggregation, and trend detection
+- **🤖 Natural Language Queries**: Ask questions about your portfolio in plain English and get intelligent responses
+- **📉 Advanced Visualizations**: Interactive charts, graphs, and comprehensive data displays
+- **🚨 Proactive Alerts**: Automated notifications for significant market events or portfolio changes
+- **🔗 Native Hedera Integration**: Deep integration with Hedera SDK and Agent Kit for seamless blockchain operations
 
 ### Core Architecture Philosophy
 
@@ -17,134 +29,166 @@ The system is built around three fundamental principles:
 ### Detailed System Capabilities
 
 #### 🔍 **Portfolio Intelligence**
+
 - **Multi-Account Monitoring**: Simultaneously track multiple Hedera accounts (0.0.xxxxx format)
 - **Real-time Balance Tracking**: Instant updates on HBAR and HTS token balances
 - **Historical Analysis**: Track portfolio performance over time with detailed metrics
 - **Risk Scoring**: AI-powered risk assessment based on portfolio composition and market conditions
 
 #### 📊 **Market Intelligence**
+
 - **Sentiment Analysis**: Real-time analysis of X (Twitter) sentiment for Hedera-related topics
 - **News Aggregation**: Automated collection and analysis of crypto news affecting portfolio assets
 - **Trend Detection**: Identify emerging market trends that could impact portfolio performance
 - **Alert System**: Proactive notifications for significant market events or portfolio changes
 
 #### 🤖 **AI-Powered Insights**
+
 - **Natural Language Queries**: Ask questions about your portfolio in plain English
 - **Predictive Analytics**: AI-driven predictions for portfolio performance and risk factors
 - **Automated Recommendations**: Intelligent suggestions for portfolio optimization
 - **Address Analysis**: Deep analysis of any Hedera account for due diligence
 
 #### 🔗 **Hedera Ecosystem Integration**
+
 - **HTS Token Support**: Full support for Hedera Token Service (HTS) tokens
 - **Smart Contract Interaction**: Ready for integration with Hedera smart contracts
 - **Multi-Network Support**: Configurable for both testnet and mainnet environments
 - **Account Discovery**: Automatic detection of new tokens and account activities
 
-### Agent Communication Flow
+### ATLAS System Architecture
 
 ```mermaid
-graph TB
-    User[👤 User] --> ChatAgent[🗨️ Chat Agent]
-    
-    subgraph "A2A Message Bus"
-        Bus[📡 Central Message Bus<br/>Event-Driven Communication]
-    end
-    
-    subgraph "Core Agents"
-        ChatAgent --> Bus
-        PortfolioAgent[📊 Portfolio Agent] --> Bus
-        WalletAgent[💰 Wallet Agent] --> Bus
-        LLMAgent[🤖 Hedera LLM Agent] --> Bus
-    end
-    
-    subgraph "Data Agents"
-        XTrendAgent[📈 XTrend Agent] --> Bus
-        ScannerAgent[🔍 Scanner Agent] --> Bus
-        GraphAgent[📉 Graph Agent] --> Bus
-    end
-    
-    subgraph "External Services"
-        HederaNetwork[🌐 Hedera Network<br/>Testnet/Mainnet]
-        TwitterAPI[🐦 X Twitter API]
-        NewsAPI[📰 News API]
-        OpenAI[🧠 OpenAI GPT-4]
-    end
-    
-    Bus --> ChatAgent
-    Bus --> PortfolioAgent
-    Bus --> WalletAgent
-    Bus --> LLMAgent
-    Bus --> XTrendAgent
-    Bus --> ScannerAgent
-    Bus --> GraphAgent
-    
-    WalletAgent --> HederaNetwork
-    PortfolioAgent --> HederaNetwork
-    LLMAgent --> HederaNetwork
-    LLMAgent --> OpenAI
-    XTrendAgent --> TwitterAPI
-    XTrendAgent --> NewsAPI
-    ScannerAgent --> HederaNetwork
-    
-    ChatAgent --> User
-    
-    classDef userClass fill:#e1f5fe
-    classDef agentClass fill:#f3e5f5
-    classDef busClass fill:#fff3e0
-    classDef externalClass fill:#e8f5e8
-    
-    class User userClass
-    class ChatAgent,PortfolioAgent,WalletAgent,LLMAgent,XTrendAgent,ScannerAgent,GraphAgent agentClass
-    class Bus busClass
-    class HederaNetwork,TwitterAPI,NewsAPI,OpenAI externalClass
-```
-
-### Message Flow Examples
-
-#### Portfolio Risk Assessment Flow
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant CA as Chat Agent
-    participant PA as Portfolio Agent
-    participant XA as XTrend Agent
-    participant LA as LLM Agent
-    participant Bus as A2A Bus
-    
-    U->>CA: "Analyze my portfolio risk"
-    CA->>Bus: llm_query
-    Bus->>LA: Route message
-    LA->>Bus: analysis_request
-    Bus->>PA: Route to Portfolio Agent
-    PA->>Bus: balance_update
-    Bus->>XA: Request sentiment data
-    XA->>Bus: x_news_alert
-    Bus->>PA: Sentiment data
-    PA->>Bus: risk_summary
-    Bus->>LA: Risk data
-    LA->>Bus: llm_response
-    Bus->>CA: Final analysis
-    CA->>U: "Your portfolio has moderate risk..."
-```
-
-#### Real-time Monitoring Flow
-```mermaid
-sequenceDiagram
-    participant SA as Scanner Agent
-    participant PA as Portfolio Agent
-    participant GA as Graph Agent
-    participant Bus as A2A Bus
-    participant HN as Hedera Network
-    
-    loop Every 30 seconds
-        SA->>HN: Query account balances
-        HN->>SA: Balance data
-        SA->>Bus: scan_request
-        Bus->>PA: Route scan data
-        PA->>Bus: balance_update
-        Bus->>GA: Request graph update
-        GA->>Bus: graph_ready
-    end
+---
+config:
+  look: neo
+  theme: dark
+  layout: fixed
+---
+flowchart RL
+ subgraph subGraph0["Frontend Layer"]
+        UI["Chat Interface"]
+        WS["WebSocket Connection"]
+  end
+ subgraph subGraph1["Backend Layer"]
+        API["REST API"]
+        SSE["Server-Sent Events"]
+        BUS["A2A Message Bus"]
+  end
+ subgraph subGraph2["Core Agents"]
+        CHAT["Chat Agent<br>chat@portfolio.guard"]
+        SCAN["Scanner Agent<br>scanner@portfolio.guard"]
+        WALLET["Wallet Agent<br>wallet@portfolio.guard"]
+        XTREND["XTrend Agent<br>xtrend@portfolio.guard"]
+        PORT["Portfolio Agent<br>portfolio@portfolio.guard"]
+        GRAPH["Graph Agent<br>graph@portfolio.guard"]
+        LLM["LLM Agent<br>llm@portfolio.guard"]
+        NEWS["News Agent<br>news@portfolio.guard"]
+  end
+ subgraph subGraph3["Portfolio Analysis Workflow"]
+        P2["CHAT: Parse Intent"]
+        P1@{ label: "User: 'scan 0.0.4'" }
+        P3@{ label: "SCAN: analyze_address('0.0.4')" }
+        P4@{ label: "WALLET: get_balance('0.0.4')" }
+        P5["SCAN: Receive balance_data"]
+        P6["XTREND: get_sentiment(HBAR)"]
+        P7["SCAN: Receive sentiment_data"]
+        P8["SCAN: Calculate Risk Score"]
+        P9["PORT: calculate_risk(portfolio_data)"]
+        P10["SCAN: Receive risk_assessment"]
+        P11["CHAT: Receive analysis_response"]
+        P12["LLM: llm_query(analysis_data)"]
+        P13["CHAT: Receive llm_response"]
+        P14["User: Comprehensive Analysis + Charts"]
+  end
+ subgraph subGraph4["News Analysis Workflow"]
+        N2["CHAT: Extract Search Terms"]
+        N1@{ label: "User: 'search news for HBAR'" }
+        N3@{ label: "NEWS: analyze_flexible_query(['HBAR', 'HEDERA'])" }
+        N4["NEWS: fetch_news_headlines(HBAR)"]
+        N5["XTREND: fetch_x_sentiment(HBAR)"]
+        N6["NEWS: Combine & Analyze Data"]
+        N7["CHAT: Receive news_complete(news_data)"]
+        N8["LLM: llm_query(news_analysis)"]
+        N9["CHAT: Receive llm_response"]
+        N10["User: News Analysis + Market Insights"]
+  end
+ subgraph subGraph5["Agent Ecosystem"]
+        subGraph2
+        subGraph3
+        subGraph4
+  end
+ subgraph subGraph6["External Services"]
+        HEDERA["Hedera Network"]
+        NEWSAPI["News APIs"]
+        SOCIAL["Social Media APIs"]
+        AI["AI/LLM Services"]
+  end
+    P1 --> P2
+    P2 --> P3
+    P3 --> P4 & P6
+    P4 --> P5
+    P6 --> P7
+    P5 --> P8
+    P7 --> P8
+    P8 --> P9
+    P9 --> P10
+    P10 --> P11
+    P11 --> P12
+    P12 --> P13
+    P13 --> P14
+    N1 --> N2
+    N2 --> N3
+    N3 --> N4 & N5
+    N4 --> N6
+    N5 --> N6
+    N6 --> N7
+    N7 --> N8
+    N8 --> N9
+    N9 --> N10
+    UI --> WS
+    WS --> API & UI
+    API --> SSE & BUS
+    SSE --> WS
+    BUS --> CHAT & SCAN & WALLET & XTREND & PORT & GRAPH & LLM & NEWS
+    CHAT --> BUS
+    SCAN --> BUS
+    WALLET --> BUS & HEDERA
+    XTREND --> BUS & NEWSAPI & SOCIAL
+    PORT --> BUS
+    GRAPH --> BUS
+    LLM --> BUS & AI
+    NEWS --> BUS & NEWSAPI
+    P1@{ shape: rect}
+    P3@{ shape: rect}
+    P4@{ shape: rect}
+    N1@{ shape: rect}
+    N3@{ shape: rect}
+     P2:::workflowNode
+     P1:::workflowNode
+     P3:::workflowNode
+     P4:::workflowNode
+     P5:::workflowNode
+     P6:::workflowNode
+     P7:::workflowNode
+     P8:::workflowNode
+     P9:::workflowNode
+     P10:::workflowNode
+     P11:::workflowNode
+     P12:::workflowNode
+     P13:::workflowNode
+     P14:::workflowNode
+     N2:::workflowNode
+     N1:::workflowNode
+     N3:::workflowNode
+     N4:::workflowNode
+     N5:::workflowNode
+     N6:::workflowNode
+     N7:::workflowNode
+     N8:::workflowNode
+     N9:::workflowNode
+     N10:::workflowNode
+    classDef workflowNode fill:#f9f9f9,stroke:#333,stroke-width:2px
 ```
 
 ### Key Features
@@ -152,48 +196,61 @@ sequenceDiagram
 - **Real-time Portfolio Monitoring**: Track HBAR and token balances across Hedera accounts with sub-second latency
 - **AI-Powered Risk Analysis**: Machine learning-driven risk assessment based on market sentiment, portfolio composition, and historical patterns
 - **Multi-Source News Integration**: X (Twitter) and NewsAPI integration for comprehensive market sentiment analysis
-- **Distributed Agent Architecture**: 7 specialized agents working in harmony for optimal performance and reliability
+- **Distributed Agent Architecture**: 8 specialized agents working in harmony for optimal performance and reliability
 - **Native Hedera Integration**: Direct integration with Hedera SDK and Agent Kit for seamless blockchain operations
 - **Scalable Communication**: Event-driven A2A message bus supporting horizontal scaling and fault tolerance
 
 ## 🤖 Agent Architecture
 
-The system consists of 7 specialized agents that communicate via the A2A message bus:
+The system consists of 8 specialized agents that communicate via the A2A message bus:
 
 ### 1. **Chat Agent** (`chatAgent.ts`)
+
 - **Purpose**: Handles user interactions and chat-based queries
 - **Responsibilities**: Process user commands, coordinate with other agents
 - **A2A Messages**: Receives user queries, sends responses
 
 ### 2. **Portfolio Agent** (`portfolioAgent.ts`)
+
 - **Purpose**: Monitors user portfolios and generates risk assessments
 - **Responsibilities**: Track balance changes, calculate risk scores, generate alerts
 - **A2A Messages**: Sends `balance_update`, `risk_summary` messages
 
 ### 3. **Wallet Agent** (`walletAgent.ts`)
+
 - **Purpose**: Manages wallet operations and account interactions
 - **Responsibilities**: Account balance queries, transaction monitoring
 - **A2A Messages**: Handles wallet-related requests
 
 ### 4. **XTrend Agent** (`newsAgent.ts`)
+
 - **Purpose**: Monitors X (Twitter) for market sentiment and news
 - **Responsibilities**: Fetch trending topics, analyze sentiment, send alerts
 - **A2A Messages**: Sends `x_news_alert` messages with sentiment data
 
 ### 5. **Graph Agent** (`graphAgent.ts`)
+
 - **Purpose**: Generates portfolio visualization data
 - **Responsibilities**: Create charts, graphs, and visual representations
 - **A2A Messages**: Responds to `graph_request` with `graph_ready` data
 
 ### 6. **Hedera LLM Agent** (`hederaLLMAgent.ts`)
+
 - **Purpose**: AI-powered analysis and natural language processing
 - **Responsibilities**: Address analysis, portfolio insights, user query responses
 - **A2A Messages**: Handles `llm_query`, sends `llm_response`
 
 ### 7. **Scanner Agent** (`scannerAgent.ts`)
+
 - **Purpose**: Automated portfolio scanning and discovery
 - **Responsibilities**: Scan accounts, detect new tokens, monitor changes
 - **A2A Messages**: Sends `scan_request` and processes scan results
+
+### 8. **News Agent** (`newsAgent.ts`)
+
+- **Purpose**: News aggregation and market intelligence
+- **Responsibilities**: Fetch news headlines, analyze market trends, provide news insights
+- **A2A Messages**: Handles `analyze_flexible_query`, sends `news_complete` with market data
 
 ## 🔄 A2A Communication System
 
@@ -204,18 +261,22 @@ The A2A (Agent-to-Agent) communication system is implemented in `utils/bus.ts` a
 ```typescript
 class A2ABus extends EventEmitter {
   // Agent registration and management
-  registerAgent(agentName: string): void
-  unregisterAgent(agentName: string): void
-  
+  registerAgent(agentName: string): void;
+  unregisterAgent(agentName: string): void;
+
   // Message sending and routing
-  sendMessage(message: A2AMessage): void
-  
+  sendMessage(message: A2AMessage): void;
+
   // Response coordination
-  waitForResponses(messageId: string, expectedAgents: string[], timeout?: number): Promise<A2AMessage[]>
-  
+  waitForResponses(
+    messageId: string,
+    expectedAgents: string[],
+    timeout?: number
+  ): Promise<A2AMessage[]>;
+
   // System monitoring
-  getMessageHistory(): A2AMessage[]
-  getRegisteredAgents(): string[]
+  getMessageHistory(): A2AMessage[];
+  getRegisteredAgents(): string[];
 }
 ```
 
@@ -289,18 +350,30 @@ if (process.env.HEDERA_OPERATOR_ID && process.env.HEDERA_OPERATOR_KEY) {
 ### Installation
 
 1. **Clone and install dependencies**:
+
 ```bash
+# Clone the repository
+git clone <repository-url>
+cd Atlas
+
+# Install backend dependencies
 cd backend
+npm install
+
+# Install frontend dependencies
+cd ../frontend
 npm install
 ```
 
 2. **Environment Configuration**:
+
 ```bash
 cp .env.example .env
 # Edit .env with your API keys and configuration
 ```
 
 3. **Required Environment Variables**:
+
 ```env
 # Hedera Configuration
 HEDERA_NETWORK=testnet
@@ -322,36 +395,61 @@ ENABLE_X_DATA=true
 ### Running the Application
 
 ```bash
-# Development mode
+# Start backend (from backend directory)
+cd backend
+npm run dev
+
+# Start frontend (from frontend directory, in a new terminal)
+cd frontend
 npm run dev
 
 # Production build
+# Backend
+cd backend
+npm run build
+npm start
+
+# Frontend
+cd frontend
 npm run build
 npm start
 ```
 
 ### API Endpoints
 
+**Backend (Port 3001)**:
+
 - **`GET /`**: Health check
 - **`GET /swarm/status`**: Agent swarm status
 - **`GET /swarm/health`**: System health check
-- **`POST /api/chat`**: Chat interface for user queries
+- **`POST /api/:userId/chat`**: Chat interface for user queries
+- **`POST /api/:userId/chat-stream`**: Streaming chat interface
+
+**Frontend (Port 3000)**:
+
+- **`GET /`**: Landing page
+- **`GET /chat`**: Chat interface
 
 ## 🔧 Architecture Benefits
 
 ### 1. **Modularity**
+
 Each agent has a single responsibility, making the system easy to maintain and extend.
 
 ### 2. **Scalability**
+
 Agents can be distributed across multiple processes or servers as needed.
 
 ### 3. **Fault Tolerance**
+
 If one agent fails, others continue operating independently.
 
 ### 4. **Real-time Communication**
+
 A2A message bus enables instant communication between agents.
 
 ### 5. **Extensibility**
+
 New agents can be added without modifying existing code.
 
 ## 🔮 Future Enhancements
@@ -365,18 +463,25 @@ New agents can be added without modifying existing code.
 ## 📁 Project Structure
 
 ```
-backend/
-├── src/
-│   ├── agents/           # Individual agent implementations
-│   ├── config/           # Configuration files
-│   ├── routes/           # Express.js routes
-│   ├── services/         # Business logic services
-│   ├── store/            # Data storage and user management
-│   ├── swarm/            # Agent orchestration
-│   └── utils/            # Utility functions and A2A bus
-├── package.json          # Dependencies and scripts
-├── tsconfig.json         # TypeScript configuration
-└── .env.example          # Environment variables template
+Atlas/
+├── backend/              # ATLAS Backend - Multi-Agent System
+│   ├── src/
+│   │   ├── agents/       # Individual agent implementations
+│   │   ├── config/       # Configuration files
+│   │   ├── routes/       # Express.js routes
+│   │   ├── services/     # Business logic services
+│   │   ├── store/        # Data storage and user management
+│   │   ├── swarm/        # Agent orchestration
+│   │   └── utils/        # Utility functions and A2A bus
+│   ├── package.json      # Dependencies and scripts
+│   ├── tsconfig.json     # TypeScript configuration
+│   └── ARCHITECTURE.md   # Detailed architecture documentation
+├── frontend/             # ATLAS Frontend - React/Next.js Chat Interface
+│   ├── components/       # React components
+│   ├── hooks/           # Custom React hooks
+│   ├── app/             # Next.js app directory
+│   └── package.json     # Frontend dependencies
+└── README.md            # This file
 ```
 
 ## 🤝 Contributing
