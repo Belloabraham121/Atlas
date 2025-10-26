@@ -36,13 +36,12 @@ export function ChatInterface() {
     currentConversation,
     messages: chatMessages,
     isStreaming,
-    error,
+    streamError,
     createChat,
     selectChat,
     deleteChat,
     sendMessage,
-    clearMessages,
-    hederaAccountId,
+    streamClearMessages,
   } = useChatWithStorage(address);
 
   const [input, setInput] = useState("");
@@ -57,12 +56,12 @@ export function ChatInterface() {
   const [chatToDelete, setChatToDelete] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isConnected && hederaAccountId && !hasInitialized) {
+    if (isConnected && address && !hasInitialized) {
       setHasInitialized(true);
     } else if (!isConnected) {
       setHasInitialized(false);
     }
-  }, [isConnected, hederaAccountId, hasInitialized]);
+  }, [isConnected, address, hasInitialized]);
 
   // Convert ChatMessage to display format and add welcome message if needed
   const messages = chatMessages.length === 0 && isConnected && !isStreaming
@@ -70,7 +69,7 @@ export function ChatInterface() {
         {
           id: "welcome",
           role: "assistant" as const,
-          content: `Hello! I'm ATLAS, your AI-powered Hedera portfolio intelligence assistant. I can see you're connected with wallet ${hederaAccountId}. How can I help you today? You can ask me about portfolio analysis, risk assessment, market trends, or any questions about your Hedera investments.`,
+          content: `Hello! I'm ATLAS, your AI-powered Hedera portfolio intelligence assistant. I can see you're connected with wallet ${address}. How can I help you today? You can ask me about portfolio analysis, risk assessment, market trends, or any questions about your Hedera investments.`,
           timestamp: new Date(),
           graphs: undefined,
         },
