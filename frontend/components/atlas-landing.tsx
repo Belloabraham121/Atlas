@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import { Button } from "@/components/ui/button"
-import { Dithering } from "@paper-design/shaders-react"
-import Link from "next/link"
-import { AtlasFooter } from "@/components/atlas-footer"
+import { Button } from "@/components/ui/button";
+import { Dithering } from "@paper-design/shaders-react";
+import Link from "next/link";
+import { AtlasFooter } from "@/components/atlas-footer";
 
 export function AtlasLanding() {
   return (
@@ -38,7 +38,9 @@ export function AtlasLanding() {
               <span className="text-white font-bold text-lg">ATLAS</span>
             </div>
             <Link href="/chat">
-              <Button className="bg-white text-black hover:bg-gray-200 rounded">Launch Chat</Button>
+              <Button className="bg-white text-black hover:bg-gray-200 rounded">
+                Launch Chat
+              </Button>
             </Link>
           </div>
         </nav>
@@ -52,8 +54,9 @@ export function AtlasLanding() {
                 AI-Powered Hedera Portfolio Intelligence
               </h1>
               <p className="text-lg sm:text-xl text-gray-300 max-w-2xl mx-auto">
-                Your intelligent guardian for Hedera network investments. Real-time monitoring, AI-driven insights, and
-                proactive risk management.
+                Your intelligent guardian for Hedera network investments.
+                Real-time monitoring, AI-driven insights, and proactive risk
+                management.
               </p>
             </div>
 
@@ -83,78 +86,105 @@ export function AtlasLanding() {
               {/* Portfolio Intelligence */}
               <div className="bg-black/40 backdrop-blur-sm border border-gray-600/30 rounded-lg p-6 text-left hover:border-gray-600/60 transition-colors">
                 <div className="text-2xl mb-3">🔍</div>
-                <h3 className="text-lg font-semibold text-white mb-2">Portfolio Intelligence Dashboard</h3>
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  Portfolio Intelligence Dashboard
+                </h3>
                 <p className="text-gray-400 text-sm">
-                  Multi-account overview with real-time HBAR and token balances, risk scoring, and performance charts.
+                  Multi-account overview with real-time HBAR and token balances,
+                  risk scoring, and performance charts.
                 </p>
               </div>
 
               {/* AI Analytics */}
               <div className="bg-black/40 backdrop-blur-sm border border-gray-600/30 rounded-lg p-6 text-left hover:border-gray-600/60 transition-colors">
                 <div className="text-2xl mb-3">📊</div>
-                <h3 className="text-lg font-semibold text-white mb-2">AI Analytics Center</h3>
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  AI Analytics Center
+                </h3>
                 <p className="text-gray-400 text-sm">
-                  Natural language queries, AI-generated insights, market sentiment analysis, and predictive models.
+                  Natural language queries, AI-generated insights, market
+                  sentiment analysis, and predictive models.
                 </p>
               </div>
 
-              {/* Alert System */}
+              {/* Alert System
               <div className="bg-black/40 backdrop-blur-sm border border-gray-600/30 rounded-lg p-6 text-left hover:border-gray-600/60 transition-colors">
                 <div className="text-2xl mb-3">🚨</div>
                 <h3 className="text-lg font-semibold text-white mb-2">Alert & Monitoring System</h3>
                 <p className="text-gray-400 text-sm">
                   Real-time notifications, custom alert rules, curated news feed, and proactive risk warnings.
                 </p>
-              </div>
+              </div> */}
 
               {/* Visualization */}
               <div className="bg-black/40 backdrop-blur-sm border border-gray-600/30 rounded-lg p-6 text-left hover:border-gray-600/60 transition-colors">
                 <div className="text-2xl mb-3">📈</div>
-                <h3 className="text-lg font-semibold text-white mb-2">Visualization Suite</h3>
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  Visualization Suite
+                </h3>
                 <p className="text-gray-400 text-sm">
-                  Interactive charts, network graphs, heat maps, and comparison tools for comprehensive analysis.
+                  Interactive charts, network graphs, heat maps, and comparison
+                  tools for comprehensive analysis.
                 </p>
               </div>
             </div>
 
             {/* Technical Features */}
             <div className="bg-black/40 backdrop-blur-sm border border-gray-600/30 rounded-lg p-8 mt-12 text-left">
-              <h3 className="text-xl font-semibold text-white mb-6">🔄 A2A Communication Visualization</h3>
+              <h3 className="text-xl font-semibold text-white mb-6">
+                🔄 A2A Communication Visualization
+              </h3>
               <div className="space-y-3 font-mono text-sm">
                 <div className="flex items-center gap-3">
                   <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                  <span className="text-gray-300">Chat Agent: Processing user query...</span>
+                  <span className="text-gray-300">
+                    Chat Agent: Processing user query...
+                  </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
-                  <span className="text-gray-300">Portfolio Agent: Calculating risk score...</span>
+                  <span className="text-gray-300">
+                    Portfolio Agent: Calculating risk score...
+                  </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                  <span className="text-gray-300">LLM Agent: Generating insights...</span>
+                  <span className="text-gray-300">
+                    LLM Agent: Generating insights...
+                  </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                  <span className="text-gray-300">Scanner Agent: Monitoring 5 accounts...</span>
+                  <span className="text-gray-300">
+                    Scanner Agent: Monitoring 5 accounts...
+                  </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
-                  <span className="text-gray-300">XTrend Agent: Analyzing sentiment...</span>
+                  <span className="text-gray-300">
+                    XTrend Agent: Analyzing sentiment...
+                  </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                  <span className="text-gray-300">Graph Agent: Updating charts...</span>
+                  <span className="text-gray-300">
+                    Graph Agent: Updating charts...
+                  </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                  <span className="text-gray-300">Wallet Agent: Querying balances...</span>
+                  <span className="text-gray-300">
+                    Wallet Agent: Querying balances...
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* Hedera Integration */}
             <div className="bg-black/40 backdrop-blur-sm border border-gray-600/30 rounded-lg p-6 mt-6 mb-12">
-              <h3 className="text-lg font-semibold text-white mb-4">🌐 Hedera Integration Status</h3>
+              <h3 className="text-lg font-semibold text-white mb-4">
+                🌐 Hedera Integration Status
+              </h3>
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
                   <div className="text-2xl font-bold text-white">Mainnet</div>
@@ -166,7 +196,9 @@ export function AtlasLanding() {
                 </div>
                 <div>
                   <div className="text-2xl font-bold text-white">Live</div>
-                  <p className="text-gray-400 text-sm">Transaction Monitoring</p>
+                  <p className="text-gray-400 text-sm">
+                    Transaction Monitoring
+                  </p>
                 </div>
               </div>
             </div>
@@ -177,5 +209,5 @@ export function AtlasLanding() {
         <AtlasFooter />
       </div>
     </div>
-  )
+  );
 }
