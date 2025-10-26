@@ -9,64 +9,32 @@ import { useAccount, useDisconnect } from "wagmi";
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import WalletConnection from "@/components/WalletConnection";
 import Link from "next/link";
-import { useChatStream } from "@/hooks/use-chat-stream";
+import { useChatWithStorage } from "@/hooks/use-chat-with-storage";
 import { MessageContent } from "@/components/MessageContent";
-
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
-  isStreaming?: boolean;
-  graphs?: any[];
-}
-
-interface ChatSession {
-  id: string;
-  title: string;
-  timestamp: Date;
-  messageCount: number;
-}
+import { ChatMessage } from "@/lib/chat-storage";
 
 export function ChatInterface() {
   const { isConnected, address } = useAccount();
   const { disconnect } = useDisconnect();
   const { openConnectModal } = useConnectModal();
 
-  // Use the streaming chat hook
+  // Use the chat hook with local storage
   const {
-    messages: streamMessages,
+    conversations,
+    currentConversation,
+    messages: chatMessages,
     isStreaming,
-    error: streamError,
+    error,
+    createChat,
+    selectChat,
+    deleteChat,
     sendMessage,
     clearMessages,
-    isConnected: isStreamConnected,
     hederaAccountId,
-  } = useChatStream();
+  } = useChatWithStorage();
 
   const [input, setInput] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [chatSessions, setChatSessions] = useState<ChatSession[]>([
-    {
-      id: "1",
-      title: "Portfolio Analysis",
-      timestamp: new Date(Date.now() - 86400000),
-      messageCount: 12,
-    },
-    {
-      id: "2",
-      title: "Risk Assessment",
-      timestamp: new Date(Date.now() - 172800000),
-      messageCount: 8,
-    },
-    {
-      id: "3",
-      title: "Market Trends",
-      timestamp: new Date(Date.now() - 259200000),
-      messageCount: 15,
-    },
-  ]);
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -75,26 +43,30 @@ export function ChatInterface() {
 
   useEffect(() => {
     if (isConnected && hederaAccountId && !hasInitialized) {
-      // Clear any existing messages and show welcome message
-      clearMessages();
       setHasInitialized(true);
     } else if (!isConnected) {
       setHasInitialized(false);
     }
-  }, [isConnected, hederaAccountId, hasInitialized, clearMessages]);
+  }, [isConnected, hederaAccountId, hasInitialized]);
 
-  // Use streaming messages, but add welcome message if empty
-  const messages =
-    streamMessages.length === 0 && isConnected
-      ? [
-          {
-            id: "welcome",
-            role: "assistant" as const,
-            content: `Hello! I'm ATLAS, your AI-powered Hedera portfolio intelligence assistant. I can see you're connected with wallet ${hederaAccountId}. How can I help you today? You can ask me about portfolio analysis, risk assessment, market trends, or any questions about your Hedera investments.`,
-            timestamp: new Date(),
-          },
-        ]
-      : streamMessages;
+  // Convert ChatMessage to display format and add welcome message if needed
+  const messages = chatMessages.length === 0 && isConnected && !currentConversation
+    ? [
+        {
+          id: "welcome",
+          role: "assistant" as const,
+          content: `Hello! I'm ATLAS, your AI-powered Hedera portfolio intelligence assistant. I can see you're connected with wallet ${hederaAccountId}. How can I help you today? You can ask me about portfolio analysis, risk assessment, market trends, or any questions about your Hedera investments.`,
+          timestamp: new Date(),
+          graphs: undefined,
+        },
+      ]
+    : chatMessages.map(msg => ({
+        id: msg.id,
+        role: msg.role,
+        content: msg.content,
+        timestamp: new Date(msg.timestamp),
+        graphs: msg.metadata?.graphs,
+      }));
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -129,21 +101,12 @@ export function ChatInterface() {
   }, [input]);
 
   const handleNewChat = () => {
-    const newChat: ChatSession = {
-      id: Date.now().toString(),
-      title: "New Chat",
-      timestamp: new Date(),
-      messageCount: 0,
-    };
-    setChatSessions((prev) => [newChat, ...prev]);
-    setActiveChatId(newChat.id);
-    clearMessages();
+    const newChat = createChat("New Chat");
+    // The createChat function already handles setting the current conversation
   };
 
   const handleSelectChat = (chatId: string) => {
-    setActiveChatId(chatId);
-    // In a real app, this would load the chat history from storage
-    clearMessages();
+    selectChat(chatId);
   };
 
   // Show wallet connection screen if not connected
@@ -224,7 +187,7 @@ export function ChatInterface() {
       </div>
 
       {/* Header - Fixed positioning */}
-      <div className="relative z-20 border-b border-gray-600/30 backdrop-blur-sm sticky top-0">
+      <div className="relative z-20 border-b border-gray-600/30 backdrop-blur-sm top-0">
         <div className="px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           {/* Left: Logo */}
           <Link href="/">
@@ -300,19 +263,24 @@ export function ChatInterface() {
             <div className="text-xs text-gray-500 font-semibold px-2 mb-3">
               CHAT HISTORY
             </div>
-            {chatSessions.map((chat) => (
+            {conversations.map((chat) => (
               <button
                 key={chat.id}
                 onClick={() => handleSelectChat(chat.id)}
                 className={cn(
-                  "w-full text-left px-3 py-2 rounded text-sm transition-colors truncate",
-                  activeChatId === chat.id
+                  "w-full text-left px-3 py-2 rounded text-sm transition-colors",
+                  currentConversation?.id === chat.id
                     ? "bg-white/20 text-white border border-gray-600/50"
                     : "text-gray-300 hover:bg-white/10"
                 )}
                 title={chat.title}
               >
-                {chat.title}
+                <div className="truncate font-medium">
+                  {chat.title}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  {new Date(chat.updatedAt).toLocaleDateString()}
+                </div>
               </button>
             ))}
           </div>
