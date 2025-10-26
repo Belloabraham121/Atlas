@@ -16,6 +16,7 @@ export interface ChatStreamMessage {
   timestamp: Date;
   isStreaming?: boolean;
   graphs?: any[];
+  marketAnalysis?: any;
 }
 
 export interface UseChatStreamReturn {
@@ -52,7 +53,8 @@ export function useChatStream(): UseChatStreamReturn {
       if (!message.trim()) return;
 
       // Use fallback address for testing if wallet is not connected
-      const userAddress = address || "0x1234567890123456789012345678901234567890";
+      const userAddress =
+        address || "0x1234567890123456789012345678901234567890";
       if (!address || !isConnected) {
         setError("Please connect your wallet first to start chatting");
         return;
@@ -97,7 +99,9 @@ export function useChatStream(): UseChatStreamReturn {
         console.log("Debug - wallet address:", userAddress);
         console.log("Debug - isConnected:", isConnected);
         console.log("Debug - userId for API:", userId);
-        const apiUrl = `http://localhost:3001/api/${userId}/chat-stream`;
+        const baseUrl =
+          process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001";
+        const apiUrl = `${baseUrl}/api/${userId}/chat-stream`;
         console.log("Debug - API URL:", apiUrl);
 
         // Close any existing EventSource
@@ -275,7 +279,50 @@ export function useChatStream(): UseChatStreamReturn {
 
     let formatted = "";
 
-    // Handle marketData structure
+    // Handle direct news data structure from backend (combinedNews, tokenAnalysis, overallSentiment)
+    if (newsData.combinedNews && Array.isArray(newsData.combinedNews)) {
+      formatted += `**📰 Latest News Articles:**\n`;
+      console.log(
+        `✅ Processing ${newsData.combinedNews.length} news articles`
+      );
+      newsData.combinedNews
+        .slice(0, 8) // Show top 8 articles
+        .forEach((article: any, index: number) => {
+          formatted += `${index + 1}. **${article.title}**\n`;
+          if (article.description) {
+            formatted += `   ${article.description}\n`;
+          }
+          formatted += `   *Source: ${article.source}* | [Read more](${article.url})\n\n`;
+        });
+    }
+
+    // Handle token analysis
+    if (newsData.tokenAnalysis && Array.isArray(newsData.tokenAnalysis)) {
+      formatted += `**🪙 Token-Specific Analysis:**\n`;
+      newsData.tokenAnalysis.forEach((analysis: any) => {
+        formatted += `• **${analysis.token.toUpperCase()}**:\n`;
+        if (analysis.news && Array.isArray(analysis.news)) {
+          analysis.news.slice(0, 3).forEach((news: any, index: number) => {
+            if (news.title && typeof news.title === "string") {
+              formatted += `  ${index + 1}. ${news.title}\n`;
+            }
+          });
+        }
+        if (analysis.x && analysis.x.sentiment) {
+          formatted += `  Social Sentiment: ${analysis.x.sentiment}\n`;
+        }
+        formatted += "\n";
+      });
+      console.log("✅ Added token analysis to formatted data");
+    }
+
+    // Handle overall sentiment
+    if (newsData.overallSentiment) {
+      formatted += `**📈 Overall Market Sentiment:** ${newsData.overallSentiment.toUpperCase()}\n\n`;
+      console.log("✅ Added overall sentiment to formatted data");
+    }
+
+    // Handle marketData structure (legacy support)
     if (newsData.marketData) {
       const marketData = newsData.marketData;
       console.log("📊 Processing marketData:", marketData);
@@ -286,47 +333,49 @@ export function useChatStream(): UseChatStreamReturn {
       }
 
       if (marketData.searchTerms && marketData.searchTerms.length > 0) {
-        formatted += `**🔍 Search Terms:** ${marketData.searchTerms.join(", ")}\n\n`;
+        formatted += `**🔍 Search Terms:** ${marketData.searchTerms.join(
+          ", "
+        )}\n\n`;
         console.log("✅ Added search terms to formatted data");
       }
 
       if (marketData.trends && marketData.trends.length > 0) {
         formatted += `**📰 Latest Market Trends:**\n`;
         console.log(`✅ Processing ${marketData.trends.length} market trends`);
-        marketData.trends
-          .slice(0, 5)
-          .forEach((trend: any, index: number) => {
-            formatted += `${index + 1}. **${trend.title}**\n`;
-            if (trend.description) {
-              formatted += `   ${trend.description}\n`;
-            }
-            formatted += `   *Source: ${trend.source}* | [Read more](${trend.url})\n\n`;
-          });
+        marketData.trends.slice(0, 5).forEach((trend: any, index: number) => {
+          formatted += `${index + 1}. **${trend.title}**\n`;
+          if (trend.description) {
+            formatted += `   ${trend.description}\n`;
+          }
+          formatted += `   *Source: ${trend.source}* | [Read more](${trend.url})\n\n`;
+        });
       }
 
       if (marketData.tokenAnalysis) {
         formatted += `**🪙 Token Analysis:**\n`;
-        Object.entries(marketData.tokenAnalysis).forEach(([token, analysis]: [string, any]) => {
-          formatted += `• **${token.toUpperCase()}**: ${analysis.sentiment || 'N/A'}\n`;
-          if (analysis.mentions) {
-            formatted += `  Mentions: ${analysis.mentions}\n`;
+        Object.entries(marketData.tokenAnalysis).forEach(
+          ([token, analysis]: [string, any]) => {
+            formatted += `• **${token.toUpperCase()}**: ${
+              analysis.sentiment || "N/A"
+            }\n`;
+            if (analysis.mentions) {
+              formatted += `  Mentions: ${analysis.mentions}\n`;
+            }
           }
-        });
+        );
         formatted += "\n";
         console.log("✅ Added token analysis to formatted data");
       }
 
       if (marketData.xPosts && marketData.xPosts.length > 0) {
         formatted += `**🐦 Recent Social Posts:**\n`;
-        marketData.xPosts
-          .slice(0, 3)
-          .forEach((post: any, index: number) => {
-            formatted += `${index + 1}. ${post.text || post.content}\n`;
-            if (post.author) {
-              formatted += `   *by @${post.author}*\n`;
-            }
-            formatted += "\n";
-          });
+        marketData.xPosts.slice(0, 3).forEach((post: any, index: number) => {
+          formatted += `${index + 1}. ${post.text || post.content}\n`;
+          if (post.author) {
+            formatted += `   *by @${post.author}*\n`;
+          }
+          formatted += "\n";
+        });
         console.log("✅ Added X posts to formatted data");
       }
 
@@ -588,19 +637,20 @@ export function useChatStream(): UseChatStreamReturn {
       if (step === "assistant_message") {
         console.log("🤖 assistant_message step data:", data);
         console.log("🔍 Assistant message data keys:", Object.keys(data || {}));
-        
+
         const assistantMsg = getMessageFromData(data);
-        
+
         // Try to get graphs from various possible fields
-        let graphs = data?.responseGraphs || 
-                    data?.data?.responseGraphs || 
-                    data?.data?.graphs || 
-                    data?.graphs || 
-                    [];
-        
+        let graphs =
+          data?.responseGraphs ||
+          data?.data?.responseGraphs ||
+          data?.data?.graphs ||
+          data?.graphs ||
+          [];
+
         console.log("📊 Assistant message content:", assistantMsg);
         console.log("📈 Assistant message graphs:", graphs);
-        
+
         if (assistantMsg) {
           // Create a new message for the final assistant response with graphs
           const finalAssistantMessage: ChatStreamMessage = {
@@ -609,7 +659,8 @@ export function useChatStream(): UseChatStreamReturn {
             content: assistantMsg,
             timestamp: new Date(),
             isStreaming: false,
-            graphs: Array.isArray(graphs) && graphs.length > 0 ? graphs : undefined,
+            graphs:
+              Array.isArray(graphs) && graphs.length > 0 ? graphs : undefined,
           };
           setMessages((prev) => [...prev, finalAssistantMessage]);
         }
@@ -649,7 +700,7 @@ export function useChatStream(): UseChatStreamReturn {
               data.intent.isSelfScan ? "Yes" : "No"
             }`;
           }
-          
+
           // Check for news data in the intent step and display it
           if (data.data) {
             console.log("📊 News data found in intent step:", data.data);
@@ -660,9 +711,15 @@ export function useChatStream(): UseChatStreamReturn {
             }
           } else if (data.marketData) {
             // Handle case where marketData is directly in data
-            console.log("📊 Direct marketData found in intent step:", data.marketData);
+            console.log(
+              "📊 Direct marketData found in intent step:",
+              data.marketData
+            );
             const formattedData = formatNewsData(data);
-            console.log("📝 Formatted direct news data in intent:", formattedData);
+            console.log(
+              "📝 Formatted direct news data in intent:",
+              formattedData
+            );
             if (formattedData) {
               stepMessage += `\n\n**📰 News Analysis**:\n${formattedData}`;
             }
@@ -710,20 +767,51 @@ export function useChatStream(): UseChatStreamReturn {
           stepMessage = `✅ ${
             getMessageFromData(data) || "News analysis complete"
           }`;
-          
-          // Only display news data if it wasn't already shown in the intent step
-          // Check if we have news data and if it should be displayed here
+
+          // Display the actual news data instead of just a summary
           const hasNewsData = data.data || data.marketData;
           if (hasNewsData) {
             console.log("📊 News data found in news_complete:", hasNewsData);
-            // For now, we'll show a summary since detailed data is in the intent step
-            stepMessage += `\n\n📊 **Analysis Summary**: Market trends, sentiment analysis, and news insights have been processed and are available above.`;
+            const formattedData = formatNewsData(hasNewsData);
+            console.log(
+              "📝 Formatted news data in news_complete:",
+              formattedData
+            );
+            if (formattedData) {
+              stepMessage += `\n\n${formattedData}`;
+            }
           } else {
-            console.log("❌ No news data found in data.data or data.marketData");
+            console.log(
+              "❌ No news data found in data.data or data.marketData"
+            );
           }
-          
+
           if (data.agent) {
             stepMessage += `\n🤖 **Agent**: ${data.agent}`;
+          }
+
+          // Create a message with market analysis data for structured display
+          if (hasNewsData) {
+            // Transform backend data to match MarketAnalysisDisplay expected format
+            const transformedMarketAnalysis = {
+              searchTerms: hasNewsData.searchTerms || [],
+              newsAnalysis: {
+                combinedNews:
+                  hasNewsData.trends || hasNewsData.combinedNews || [],
+                tokenAnalysis: hasNewsData.tokenAnalysis || [],
+              },
+            };
+
+            const newsAssistantMessage: ChatStreamMessage = {
+              id: (Date.now() + Math.random()).toString(),
+              role: "assistant",
+              content: stepMessage,
+              timestamp: new Date(),
+              isStreaming: false,
+              marketAnalysis: transformedMarketAnalysis, // Pass the transformed data for structured display
+            };
+            setMessages((prev) => [...prev, newsAssistantMessage]);
+            return;
           }
           break;
         case "llm_start":
@@ -822,25 +910,33 @@ export function useChatStream(): UseChatStreamReturn {
           console.log("🔍 Complete step data keys:", Object.keys(data || {}));
           console.log("🔍 Complete step data.data:", data?.data);
           console.log("🔍 Complete step data.message:", data?.message);
-          console.log("🔍 Complete step data.assistantResponse:", data?.assistantResponse);
-          console.log("🔍 Complete step data.responseGraphs:", data?.responseGraphs);
-          
+          console.log(
+            "🔍 Complete step data.assistantResponse:",
+            data?.assistantResponse
+          );
+          console.log(
+            "🔍 Complete step data.responseGraphs:",
+            data?.responseGraphs
+          );
+
           const completeMsg = getMessageFromData(data);
-          
+
           // Try to get the final response from various possible fields
-          let finalResponse = data?.assistantResponse || 
-                             data?.data?.assistantResponse || 
-                             data?.data?.response || 
-                             data?.response || 
-                             completeMsg || 
-                             "Analysis complete";
-          
+          let finalResponse =
+            data?.assistantResponse ||
+            data?.data?.assistantResponse ||
+            data?.data?.response ||
+            data?.response ||
+            completeMsg ||
+            "Analysis complete";
+
           // Try to get graphs from various possible fields
-          let graphs = data?.responseGraphs || 
-                      data?.data?.responseGraphs || 
-                      data?.data?.graphs || 
-                      data?.graphs || 
-                      [];
+          let graphs =
+            data?.responseGraphs ||
+            data?.data?.responseGraphs ||
+            data?.data?.graphs ||
+            data?.graphs ||
+            [];
 
           console.log("📊 Final response to display:", finalResponse);
           console.log("📈 Graphs to display:", graphs);
@@ -852,7 +948,8 @@ export function useChatStream(): UseChatStreamReturn {
             content: finalResponse,
             timestamp: new Date(),
             isStreaming: false,
-            graphs: Array.isArray(graphs) && graphs.length > 0 ? graphs : undefined,
+            graphs:
+              Array.isArray(graphs) && graphs.length > 0 ? graphs : undefined,
           };
           setMessages((prev) => [...prev, completeAssistantMessage]);
           return;

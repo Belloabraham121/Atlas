@@ -1324,15 +1324,14 @@ Keep the response informative and actionable.`;
         const targetUserId = intent.userId || userId;
         const isSelfScan = intent.isSelfScan || targetUserId === userId;
         
-        // Check if this is a news request (token === "all")
-        const isNewsRequest = intent.token === "all";
+        // Check for explicit news-related keywords to route to market news
+        const isNewsRequest = /\b(news|market trends?|sentiment|headlines|market (analysis|update))\b/i.test(message);
         console.log(`🔍 Debug - Intent token: ${intent.token}, isNewsRequest: ${isNewsRequest}`);
         
         if (isNewsRequest) {
-          // Handle news request by extracting search terms from user message
+          // Handle news request by extracting search terms from the user's message
           console.log(`📰 Processing news request: "${message}"`);
           
-          // Extract search terms from the user's message
           const searchTerms = await this.extractNewsSearchTerms(message, userId);
           console.log(`🔍 Extracted search terms: ${JSON.stringify(searchTerms)}`);
           
@@ -1342,7 +1341,6 @@ Keep the response informative and actionable.`;
             agent: "news@portfolio.guard",
           });
 
-          // Import and use news agent directly
           const { analyzeFlexibleQuery } = await import("./newsAgent.js");
           const newsAnalysis = await analyzeFlexibleQuery(searchTerms);
           
@@ -1352,11 +1350,10 @@ Keep the response informative and actionable.`;
             agent: "news@portfolio.guard",
           });
 
-          // Construct marketData from news analysis
           const marketData = {
-            searchTerms: searchTerms,
-            newsAnalysis: newsAnalysis,
-            timestamp: new Date().toISOString()
+            searchTerms,
+            newsAnalysis,
+            timestamp: new Date().toISOString(),
           };
 
           // Step 2: LLM Analysis
@@ -1365,7 +1362,6 @@ Keep the response informative and actionable.`;
             agent: "llm@portfolio.guard",
           });
 
-          // Send to LLM for final analysis
           bus.sendMessage({
             from: this.agentName,
             to: "llm@portfolio.guard",
@@ -1391,7 +1387,6 @@ Keep the response informative and actionable.`;
             });
           }
 
-          // Final Summary for news
           const latency = Date.now() - startTime;
           let summaryResponse = `📰 **MARKET NEWS & TRENDS**\n\n`;
           summaryResponse += `🔍 **Search Terms**: ${searchTerms.join(", ")}\n`;
@@ -1401,7 +1396,7 @@ Keep the response informative and actionable.`;
 
           sendStep("complete", {
             response: summaryResponse,
-            latency: latency,
+            latency,
           });
 
           return;

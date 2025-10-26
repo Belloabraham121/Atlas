@@ -318,7 +318,12 @@ export function useChatWithStorage(address?: string): UseChatWithStorageReturn {
               address,
               "assistant",
               streamMsg.content,
-              streamMsg.graphs ? { graphs: streamMsg.graphs } : undefined
+              {
+                ...(streamMsg.graphs ? { graphs: streamMsg.graphs } : {}),
+                ...(streamMsg.marketAnalysis
+                  ? { marketAnalysis: streamMsg.marketAnalysis }
+                  : {}),
+              }
             );
 
             if (savedMessage) {
@@ -383,7 +388,10 @@ export function useChatWithStorage(address?: string): UseChatWithStorageReturn {
         content: msg.content,
         timestamp: msg.timestamp.getTime(),
         contentHash: "",
-        metadata: msg.graphs ? { graphs: msg.graphs } : undefined,
+        metadata: {
+          ...(msg.graphs ? { graphs: msg.graphs } : {}),
+          ...(msg.marketAnalysis ? { marketAnalysis: msg.marketAnalysis } : {}),
+        },
       }));
     }
 
@@ -397,7 +405,10 @@ export function useChatWithStorage(address?: string): UseChatWithStorageReturn {
         content: msg.content,
         timestamp: msg.timestamp.getTime(),
         contentHash: "",
-        metadata: msg.graphs ? { graphs: msg.graphs } : undefined,
+        metadata: {
+          ...(msg.graphs ? { graphs: msg.graphs } : {}),
+          ...(msg.marketAnalysis ? { marketAnalysis: msg.marketAnalysis } : {}),
+        },
       }));
 
       // Combine and deduplicate
