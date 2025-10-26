@@ -108,11 +108,10 @@ export function useChatWithStorage(): UseChatWithStorageReturn {
     setCurrentConversation(newChat);
     setMessages([]);
     
-    // Clear streaming messages
-    streamClearMessages();
+    // Don't clear streaming messages - let user continue with current conversation
     
     return newChat;
-  }, [address, streamClearMessages]);
+  }, [address]);
 
   // Select a chat
   const selectChat = useCallback((chatId: string) => {
@@ -178,9 +177,15 @@ export function useChatWithStorage(): UseChatWithStorageReturn {
 
   // Send a message
   const sendMessage = useCallback(async (message: string) => {
-    if (!address || !currentConversation) {
-      setError("Please select a chat to send a message");
+    if (!address) {
+      setError("Please connect your wallet to send a message");
       return;
+    }
+
+    // If no current conversation, create a new one
+    let conversation = currentConversation;
+    if (!conversation) {
+      conversation = createChat("New Chat");
     }
 
     try {
@@ -188,7 +193,7 @@ export function useChatWithStorage(): UseChatWithStorageReturn {
       
       // Add user message to local storage
       const userMessage = addMessageToChat(
-        currentConversation.id,
+        conversation.id,
         address,
         'user',
         message
@@ -200,7 +205,7 @@ export function useChatWithStorage(): UseChatWithStorageReturn {
       // Update conversation in local state
       setConversations(prev => 
         prev.map(chat => 
-          chat.id === currentConversation.id 
+          chat.id === conversation.id 
             ? { 
                 ...chat, 
                 messageCount: chat.messageCount + 1,
@@ -218,7 +223,7 @@ export function useChatWithStorage(): UseChatWithStorageReturn {
       console.error("Error sending message:", error);
       setError(error instanceof Error ? error.message : "Failed to send message");
     }
-  }, [address, currentConversation, streamSendMessage]);
+  }, [address, currentConversation, streamSendMessage, createChat]);
 
   // Handle streaming messages - add them to local storage when complete
   useEffect(() => {
@@ -306,10 +311,33 @@ export function useChatWithStorage(): UseChatWithStorageReturn {
     },
   }));
 
+  // Determine which messages to show
+  const displayMessages = (() => {
+    if (!currentConversation) {
+      // No conversation selected, show stream messages for new chats
+      return convertedStreamMessages;
+    }
+    
+    if (isStreaming && streamMessages.length > 0) {
+      // During streaming, combine local messages with live stream messages
+      // Remove any duplicate messages and show the live stream
+      const localMessagesWithoutDuplicates = messages.filter(localMsg => 
+        !streamMessages.some(streamMsg => 
+          streamMsg.role === localMsg.role && 
+          Math.abs(streamMsg.timestamp.getTime() - localMsg.timestamp) < 5000
+        )
+      );
+      return [...localMessagesWithoutDuplicates, ...convertedStreamMessages];
+    }
+    
+    // Not streaming, show local stored messages
+    return messages;
+  })();
+
   return {
     conversations,
     currentConversation,
-    messages: currentConversation ? messages : convertedStreamMessages, // Use local messages for selected chat, stream messages for new chats
+    messages: displayMessages,
     isStreaming,
     error: combinedError,
     createChat,

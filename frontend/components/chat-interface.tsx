@@ -12,6 +12,18 @@ import Link from "next/link";
 import { useChatWithStorage } from "@/hooks/use-chat-with-storage";
 import { MessageContent } from "@/components/MessageContent";
 import { ChatMessage } from "@/lib/chat-storage";
+import { Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export function ChatInterface() {
   const { isConnected, address } = useAccount();
@@ -40,6 +52,9 @@ export function ChatInterface() {
 
   // Initialize with welcome message when connected
   const [hasInitialized, setHasInitialized] = useState(false);
+  
+  // Delete confirmation state
+  const [chatToDelete, setChatToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     if (isConnected && hederaAccountId && !hasInitialized) {
@@ -50,7 +65,7 @@ export function ChatInterface() {
   }, [isConnected, hederaAccountId, hasInitialized]);
 
   // Convert ChatMessage to display format and add welcome message if needed
-  const messages = chatMessages.length === 0 && isConnected && !currentConversation
+  const messages = chatMessages.length === 0 && isConnected && !isStreaming
     ? [
         {
           id: "welcome",
@@ -107,6 +122,15 @@ export function ChatInterface() {
 
   const handleSelectChat = (chatId: string) => {
     selectChat(chatId);
+  };
+
+  const handleDeleteChat = (chatId: string) => {
+    deleteChat(chatId);
+    setChatToDelete(null);
+    // If we deleted the current conversation, clear it
+    if (currentConversation?.id === chatId) {
+      // The deleteChat function should handle this, but let's be safe
+    }
   };
 
   // Show wallet connection screen if not connected
@@ -264,24 +288,63 @@ export function ChatInterface() {
               CHAT HISTORY
             </div>
             {conversations.map((chat) => (
-              <button
+              <div
                 key={chat.id}
-                onClick={() => handleSelectChat(chat.id)}
                 className={cn(
-                  "w-full text-left px-3 py-2 rounded text-sm transition-colors",
+                  "w-full rounded text-sm transition-colors relative group",
                   currentConversation?.id === chat.id
                     ? "bg-white/20 text-white border border-gray-600/50"
                     : "text-gray-300 hover:bg-white/10"
                 )}
-                title={chat.title}
               >
-                <div className="truncate font-medium">
-                  {chat.title}
-                </div>
-                <div className="text-xs text-gray-500 mt-1">
-                  {new Date(chat.updatedAt).toLocaleDateString()}
-                </div>
-              </button>
+                <button
+                  onClick={() => handleSelectChat(chat.id)}
+                  className="w-full text-left px-3 py-2 pr-10"
+                  title={chat.title}
+                >
+                  <div className="truncate font-medium">
+                    {chat.title}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {new Date(chat.updatedAt).toLocaleDateString()}
+                  </div>
+                </button>
+                
+                {/* Delete Button */}
+                <AlertDialog open={chatToDelete === chat.id} onOpenChange={(open) => !open && setChatToDelete(null)}>
+                  <AlertDialogTrigger asChild>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setChatToDelete(chat.id);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-all"
+                      title="Delete chat"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent className="bg-gray-900 border-gray-700">
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="text-white">Delete Chat</AlertDialogTitle>
+                      <AlertDialogDescription className="text-gray-300">
+                        Are you sure you want to delete "{chat.title}"? This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel className="bg-gray-700 text-white hover:bg-gray-600 border-gray-600">
+                        Cancel
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => handleDeleteChat(chat.id)}
+                        className="bg-red-600 text-white hover:bg-red-700"
+                      >
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             ))}
           </div>
 
