@@ -72,6 +72,7 @@ export function ChatInterface() {
           content: `Hello! I'm ATLAS, your AI-powered Hedera portfolio intelligence assistant. I can see you're connected with wallet ${address}. How can I help you today? You can ask me about portfolio analysis, risk assessment, market trends, or any questions about your Hedera investments.`,
           timestamp: new Date(),
           graphs: undefined,
+          marketAnalysis: undefined,
         },
       ]
     : chatMessages.map(msg => ({
@@ -80,6 +81,7 @@ export function ChatInterface() {
         content: msg.content,
         timestamp: new Date(msg.timestamp),
         graphs: msg.metadata?.graphs,
+        marketAnalysis: msg.metadata?.marketAnalysis,
       }));
 
   const scrollToBottom = () => {
@@ -413,6 +415,7 @@ export function ChatInterface() {
                       <MessageContent
                         content={message.content}
                         graphs={message.graphs}
+                        marketAnalysis={message.marketAnalysis}
                       />
                     ) : (
                       message.content

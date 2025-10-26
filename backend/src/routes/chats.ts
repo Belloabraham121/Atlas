@@ -234,6 +234,7 @@ router.post(
 
       let assistantResponse = "";
       let responseGraphs: any[] = [];
+      let marketAnalysisData: any = null;
 
       try {
         // Get conversation context if requested
@@ -255,6 +256,17 @@ router.post(
           (step: string, data: any) => {
             sendStep(step, data);
             
+            // Capture market analysis data from news_complete step
+            if (step === "news_complete" && data.data) {
+              marketAnalysisData = {
+                searchTerms: data.data.searchTerms || [],
+                newsAnalysis: {
+                  combinedNews: data.data.trends || [],
+                  tokenAnalysis: data.data.tokenAnalysis || [],
+                },
+              };
+            }
+            
             // Capture the final response
             if (step === "complete" && data.response) {
               assistantResponse = data.response;
@@ -272,6 +284,7 @@ router.post(
             assistantResponse,
             {
               graphs: responseGraphs,
+              marketAnalysis: marketAnalysisData,
             }
           );
           

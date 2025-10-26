@@ -14,6 +14,7 @@ export interface ChatMessage {
     latency?: number;
     tokens?: number;
     model?: string;
+    marketAnalysis?: any;
   };
 }
 

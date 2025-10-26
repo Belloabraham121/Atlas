@@ -1,12 +1,14 @@
 import React from "react";
 import { GraphDisplay } from "./graph-display";
+import { MarketAnalysisDisplay } from "./MarketAnalysisDisplay";
 
 interface MessageContentProps {
   content: string;
   graphs?: any[];
+  marketAnalysis?: any;
 }
 
-export function MessageContent({ content, graphs }: MessageContentProps) {
+export function MessageContent({ content, graphs, marketAnalysis }: MessageContentProps) {
   // Function to parse and render formatted text
   const renderFormattedText = (text: string) => {
     // Split by lines to handle line breaks
@@ -144,6 +146,11 @@ export function MessageContent({ content, graphs }: MessageContentProps) {
   return (
     <div className="space-y-4">
       <div className="space-y-1">{renderFormattedText(content)}</div>
+      {marketAnalysis && (
+        <div className="mt-6">
+          <MarketAnalysisDisplay data={marketAnalysis} />
+        </div>
+      )}
       {graphs && graphs.length > 0 && (
         <div className="space-y-4">
           {graphs.map((graph, index) => (
